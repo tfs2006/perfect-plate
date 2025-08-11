@@ -1,0 +1,10 @@
+
+[build]
+  functions = "netlify/functions"
+  publish = "."
+
+# If you also host the static site on Netlify this lets you call /api/* on same origin.
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200

@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Perfect‑Plate · AI Meal Planner</title>
+  <meta name="description" content="Create a personalized 7‑day meal plan and grocery list with AI. Private. Fast. Export to PDF." />
+  <meta name="theme-color" content="#10b981" />
+  <link rel="icon" href="assets/favicon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
+  <script src="https://unpkg.com/lucide@latest" defer></script>
+  <link rel="stylesheet" href="css/style.css" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https:; img-src 'self' data: https:; script-src 'self' https://cdn.tailwindcss.com https://cdnjs.cloudflare.com https://unpkg.com 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https:">
+</head>
+<body class="bg-slate-50 min-h-screen antialiased">
+  <!-- App Shell -->
+  <div class="main-grid">
+    <!-- Sidebar -->
+    <aside id="sidebar" class="bg-gray-900 text-white p-6 md:p-8 flex flex-col justify-between shadow-2xl">
+      <div>
+        <h1 class="text-2xl font-bold flex items-center gap-3">
+          <i data-lucide="sparkles" class="text-emerald-400"></i>
+          Perfect‑Plate
+        </h1>
+        <p class="text-sm text-gray-400 mt-2">Intelligent nutrition, simplified.</p>
+
+        <div id="step-indicators" class="mt-12 space-y-8">
+          <div id="step-1-indicator" class="step-indicator flex items-center gap-4 opacity-100">
+            <div class="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center font-bold text-white shadow-lg">1</div>
+            <div>
+              <p class="font-bold">Your Profile</p>
+              <p class="text-sm text-gray-400">Personal details</p>
+            </div>
+          </div>
+          <div id="step-2-indicator" class="step-indicator flex items-center gap-4 opacity-50">
+            <div class="w-10 h-10 bg-gray-700 rounded-full flex items-center justify-center font-bold text-gray-400">2</div>
+            <div>
+              <p class="font-bold">Health Goals</p>
+              <p class="text-sm text-gray-400">Diet & objectives</p>
+            </div>
+          </div>
+          <div id="step-3-indicator" class="step-indicator flex items-center gap-4 opacity-50">
+            <div class="w-10 h-10 bg-gray-700 rounded-full flex items-center justify-center font-bold text-gray-400">3</div>
+            <div>
+              <p class="font-bold">Food Preferences</p>
+              <p class="text-sm text-gray-400">Likes & exclusions</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="text-center text-xs text-gray-500">
+        <p>&copy; 2025 Perfect‑Plate</p>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="w-full h-screen overflow-y-auto p-6 sm:p-8 lg:p-12 relative">
+      <!-- Loader -->
+      <div id="loader" class="loader-container hidden items-center justify-center flex-col gap-4" role="status" aria-live="polite">
+        <svg class="animate-spin h-12 w-12 text-emerald-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <p id="loader-text" class="text-lg font-semibold text-gray-700">Crafting your perfect meal plan…</p>
+      </div>
+
+      <!-- Form -->
+      <div id="form-container">
+        <form id="meal-plan-form" novalidate>
+          <!-- Step 1 -->
+          <div id="step-1" class="form-step active">
+            <h2 class="text-4xl font-bold text-gray-900">Tell us about yourself</h2>
+            <p class="text-gray-500 mt-2">This helps us create a plan that's right for you.</p>
+            <div class="mt-8 space-y-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label for="age" class="font-medium text-gray-700">Age</label>
+                  <input type="number" id="age" name="age" min="10" max="110" required class="mt-2 w-full px-4 py-3 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 shadow-sm" />
+                  <p class="text-xs text-gray-500 mt-1">Between 10 and 110</p>
+                </div>
+                <div>
+                  <label for="gender" class="font-medium text-gray-700">Gender</label>
+                  <select id="gender" name="gender" required class="mt-2 w-full px-4 py-3 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 shadow-sm">
+                    <option value="" disabled selected>Select…</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="non-binary">Non‑binary</option>
+                    <option value="prefer-not-to-say">Prefer not to say</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label for="ethnicity" class="font-medium text-gray-700">Ethnicity / Cultural Background</label>
+                <input type="text" id="ethnicity" name="ethnicity" required class="mt-2 w-full px-4 py-3 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 shadow-sm" placeholder="e.g., Mediterranean, East Asian" />
+              </div>
+            </div>
+            <div class="mt-10 flex justify-end">
+              <button type="button" id="next-1" class="btn-secondary text-white font-semibold py-3 px-8 rounded-lg hover:opacity-90 transition duration-300 shadow-lg">Next</button>
+            </div>
+          </div>
+
+          <!-- Step 2 -->
+          <div id="step-2" class="form-step">
+            <h2 class="text-4xl font-bold text-gray-900">What are your goals?</h2>
+            <p class="text-gray-500 mt-2">We'll tailor the plan to your objectives.</p>
+            <div class="mt-8 space-y-6">
+              <div>
+                <label for="fitness-goal" class="font-medium text-gray-700">Primary Goal</label>
+                <select id="fitness-goal" name="fitness-goal" class="mt-2 w-full px-4 py-3 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 shadow-sm">
+                  <option value="Weight Loss">Weight Loss</option>
+                  <option value="Maintain Weight">Maintain Weight</option>
+                  <option value="Muscle Gain">Muscle Gain</option>
+                </select>
+              </div>
+              <div>
+                <label class="font-medium text-gray-700">Dietary Pattern (optional)</label>
+                <div class="mt-4 grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <div class="checkbox-card"><input type="checkbox" name="diet" value="Vegetarian" id="veg" class="hidden"><label for="veg" class="block border-2 border-gray-200 rounded-lg p-4 text-center cursor-pointer font-semibold hover:border-emerald-400">Vegetarian</label></div>
+                  <div class="checkbox-card"><input type="checkbox" name="diet" value="Vegan" id="vegan" class="hidden"><label for="vegan" class="block border-2 border-gray-200 rounded-lg p-4 text-center cursor-pointer font-semibold hover:border-emerald-400">Vegan</label></div>
+                  <div class="checkbox-card"><input type="checkbox" name="diet" value="Keto" id="keto" class="hidden"><label for="keto" class="block border-2 border-gray-200 rounded-lg p-4 text-center cursor-pointer font-semibold hover:border-emerald-400">Keto</label></div>
+                  <div class="checkbox-card"><input type="checkbox" name="diet" value="Paleo" id="paleo" class="hidden"><label for="paleo" class="block border-2 border-gray-200 rounded-lg p-4 text-center cursor-pointer font-semibold hover:border-emerald-400">Paleo</label></div>
+                  <div class="checkbox-card"><input type="checkbox" name="diet" value="Gluten-Free" id="gluten" class="hidden"><label for="gluten" class="block border-2 border-gray-200 rounded-lg p-4 text-center cursor-pointer font-semibold hover:border-emerald-400">Gluten‑Free</label></div>
+                  <div class="checkbox-card"><input type="checkbox" name="diet" value="Dairy-Free" id="dairy" class="hidden"><label for="dairy" class="block border-2 border-gray-200 rounded-lg p-4 text-center cursor-pointer font-semibold hover:border-emerald-400">Dairy‑Free</label></div>
+                </div>
+              </div>
+            </div>
+            <div class="mt-10 flex justify-between">
+              <button type="button" id="back-2" class="bg-gray-200 text-gray-800 font-semibold py-3 px-8 rounded-lg hover:bg-gray-300 transition duration-300">Back</button>
+              <button type="button" id="next-2" class="btn-secondary text-white font-semibold py-3 px-8 rounded-lg hover:opacity-90 transition duration-300 shadow-lg">Next</button>
+            </div>
+          </div>
+
+          <!-- Step 3 -->
+          <div id="step-3" class="form-step">
+            <h2 class="text-4xl font-bold text-gray-900">Medical & Food Preferences</h2>
+            <p class="text-gray-500 mt-2">Help us avoid things you don't want.</p>
+            <div class="mt-8 space-y-6">
+              <div>
+                <label for="medical-conditions" class="font-medium text-gray-700">Known Medical Conditions</label>
+                <textarea id="medical-conditions" name="medical-conditions" rows="3" class="mt-2 w-full px-4 py-3 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 shadow-sm" placeholder="e.g., Diabetes, High Blood Pressure. If none, write ‘None’."></textarea>
+              </div>
+              <div>
+                <label for="exclusions" class="font-medium text-gray-700">Foods to Exclude</label>
+                <textarea id="exclusions" name="exclusions" rows="3" class="mt-2 w-full px-4 py-3 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 shadow-sm" placeholder="e.g., Cilantro, Mushrooms, Shellfish. If none, leave blank."></textarea>
+              </div>
+            </div>
+            <div class="mt-10 flex justify-between">
+              <button type="button" id="back-3" class="bg-gray-200 text-gray-800 font-semibold py-3 px-8 rounded-lg hover:bg-gray-300 transition duration-300">Back</button>
+              <button type="submit" class="btn-primary text-white font-bold py-3 px-8 rounded-lg hover:opacity-90 transition duration-300 shadow-lg flex items-center gap-2">
+                <i data-lucide="sparkles" class="w-5 h-5"></i>
+                Create My Plan
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <!-- Results -->
+      <div id="result-container" class="hidden">
+        <div class="flex justify-between items-start">
+          <div>
+            <h2 class="text-4xl font-bold text-gray-900">Your Personalized Plan</h2>
+            <p class="text-gray-500 mt-1">A structured 7‑day plan + grocery list.</p>
+          </div>
+          <div class="flex gap-2">
+            <button id="refine-button" class="bg-white text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-100 transition duration-300 flex items-center gap-2 border border-gray-300 shadow-sm">
+              <i data-lucide="redo" class="w-4 h-4"></i>
+              Start Over
+            </button>
+            <button id="pdf-button" class="bg-rose-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-rose-600 transition duration-300 flex items-center gap-2 shadow-lg">
+              <i data-lucide="file-down" class="w-4 h-4"></i>
+              PDF
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <!-- Left -->
+          <div class="lg:col-span-1 space-y-8">
+            <div id="image-container" class="w-full rounded-2xl overflow-hidden shadow-xl bg-white">
+              <img id="meal-plan-image" src="" alt="Meal Plan Image" class="w-full h-auto object-cover" />
+            </div>
+            <div class="bg-white p-6 rounded-2xl shadow-lg">
+              <h3 class="text-xl font-bold text-gray-900">Grocery List</h3>
+              <div id="grocery-list-container" class="mt-4 space-y-4 max-h-96 overflow-y-auto pr-2"></div>
+              <button id="grocery-list-button" class="mt-4 w-full bg-emerald-50 text-emerald-800 font-semibold py-3 px-4 rounded-lg hover:bg-emerald-100 transition duration-300 flex items-center justify-center gap-2 border border-emerald-200">
+                <i data-lucide="shopping-cart" class="w-5 h-5"></i>
+                Generate Grocery List
+              </button>
+            </div>
+          </div>
+          <!-- Right -->
+          <div class="lg:col-span-2 bg-white p-6 rounded-2xl shadow-lg">
+            <div class="border-b border-gray-200 overflow-x-auto">
+              <nav id="result-tabs" class="-mb-px flex space-x-6" aria-label="Tabs"></nav>
+            </div>
+            <div id="tab-content" class="mt-6"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Toast -->
+      <div id="message-box" class="hidden fixed bottom-5 right-5 bg-gray-900 text-white p-4 rounded-lg shadow-lg max-w-sm z-50">
+        <p id="message-text" class="font-medium"></p>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script type="module" src="js/script.js"></script>
+</body>
+</html>
