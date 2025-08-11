@@ -1,5 +1,2 @@
-// Where your serverless functions live.
-// If using Netlify for functions + GitHub Pages for the static site:
-//   set API_BASE to "https://YOUR-NETLIFY-SITE.netlify.app/.netlify/functions"
-// If deploying everything on Netlify, you can leave it empty and calls will hit same-origin.
+// Point the frontend at your production Netlify Functions
 window.API_BASE = "https://perfect-plate-app.netlify.app/.netlify/functions";

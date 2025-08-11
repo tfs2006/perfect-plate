@@ -1,29 +1,31 @@
-
-:root { --emerald-600:#059669; }
-* { font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'; }
-
+/* Base */
+body { font-family: 'Inter', sans-serif; background-color: #f7fafc; }
 .main-grid { display: grid; grid-template-columns: 300px 1fr; height: 100vh; }
 @media (max-width: 1024px) {
   .main-grid { grid-template-columns: 1fr; }
-  #sidebar { display:none; }
+  #sidebar { display: none; }
 }
 
-.form-step { display:none; }
-.form-step.active { display:block; animation: fadeIn .45s ease-in-out; }
-@keyframes fadeIn { from{opacity:0; transform:translateY(10px)} to{opacity:1; transform:translateY(0)} }
-.step-indicator { transition: all .4s ease; transform-origin: left; }
-.checkbox-card { transition: all .2s ease; }
-.checkbox-card input:checked + label { border-color: var(--emerald-600); background-color:#ecfdf5; color:#047857; }
-.loader-container { position: absolute; inset:0; background-color: rgba(240,242,245,.8); backdrop-filter: blur(4px); z-index:50; display:none; }
-.result-tab.active { color: var(--emerald-600); border-color: var(--emerald-600); }
+/* Steps */
+.form-step { display: none; }
+.form-step.active { display: block; animation: fadeIn .4s ease-in-out; }
+@keyframes fadeIn { from { opacity:.0; transform: translateY(8px);} to { opacity:1; transform: translateY(0);} }
+.step-indicator { transition: all .3s ease; transform-origin: left; }
 
+/* Cards */
+.checkbox-card { transition: all .2s ease; }
+.checkbox-card input:checked + * { border-color:#059669; background:#ecfdf5; color:#047857; }
+
+/* Loader overlay: MUST start hidden or it blocks clicks */
+.loader-container {
+  position: absolute; inset: 0;
+  background-color: rgba(240,242,245,.8);
+  backdrop-filter: blur(4px);
+  z-index: 50;
+  display: none; /* JS toggles to flex when submitting */
+}
+
+/* Tabs & buttons */
+.result-tab.active { color:#059669; border-color:#059669; }
 .btn-primary { background: linear-gradient(to right, #10b981, #34d399); }
 .btn-secondary { background: linear-gradient(to right, #6366f1, #818cf8); }
-
-/* a11y focus */
-:focus-visible { outline: 3px solid #34d399; outline-offset: 2px; }
-
-/* reduce motion */
-@media (prefers-reduced-motion: reduce) {
-  .form-step.active { animation: none; }
-}
