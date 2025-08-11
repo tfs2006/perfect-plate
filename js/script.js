@@ -171,6 +171,19 @@
       return null;
     }
 
+    // Coerce loosely-structured model output into our expected shape
+    function coercePlan(obj){
+      if (!obj) return null;
+      // If the model wrapped the plan
+      if (Array.isArray(obj.days)) return obj;
+      if (Array.isArray(obj.plan?.days)) return obj.plan;
+      if (Array.isArray(obj.weekPlan?.days)) return obj.weekPlan;
+      if (Array.isArray(obj.week?.days)) return obj.week;
+      // If it returned an array directly, treat it as days
+      if (Array.isArray(obj)) return { planTitle: '7‑Day Plan', days: obj, notes: '' };
+      return null;
+    }
+
     // ---------- Submit ----------
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -190,19 +203,61 @@
       showLoader();
 
       try {
-        // Ask model to return JSON
+        // Ask the model for STRICT JSON (schema + mime type)
         const textResult = await secureApiCall("generate-plan", {
           endpoint: "gemini-1.5-flash:generateContent",
           body: {
             contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { response_mime_type: "application/json" }
+            generationConfig: {
+              response_mime_type: "application/json",
+              response_schema: {
+                type: "OBJECT",
+                properties: {
+                  planTitle: { type: "STRING" },
+                  notes: { type: "STRING" },
+                  days: {
+                    type: "ARRAY",
+                    items: {
+                      type: "OBJECT",
+                      properties: {
+                        day: { type: "STRING" },
+                        meals: {
+                          type: "ARRAY",
+                          items: {
+                            type: "OBJECT",
+                            properties: {
+                              name: { type: "STRING" },
+                              items: {
+                                type: "ARRAY",
+                                items: {
+                                  type: "OBJECT",
+                                  properties: {
+                                    title: { type: "STRING" },
+                                    calories: { type: "NUMBER" },
+                                    protein: { type: "NUMBER" },
+                                    carbs: { type: "NUMBER" },
+                                    fat: { type: "NUMBER" }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                required: ["days"]
+              }
+            }
           }
         });
 
         const rawText = textResult?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        const plan = extractFirstJSON(rawText);
+        let plan = extractFirstJSON(rawText);
+        plan = coercePlan(plan);
         if (!plan || !Array.isArray(plan.days)) {
-          console.warn("Model raw response:", rawText);
+          console.warn("Model raw response (first 400 chars):", String(rawText).slice(0, 400));
           throw new Error("Plan format invalid.");
         }
 
