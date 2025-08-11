@@ -213,6 +213,16 @@
       return null;
     }
 
+    function getFirstPartText(obj){
+      try {
+        const parts = obj?.candidates?.[0]?.content?.parts || [];
+        for (const p of parts) {
+          if (typeof p.text === "string" && p.text.trim()) return p.text;
+        }
+        return "";
+      } catch { return ""; }
+    }
+
     function needsRepair(plan){
       let bad = false;
       (plan.days || []).forEach(d =>
@@ -310,99 +320,115 @@
         ];
 
         async function generateDays(daysArr) {
-          const prompt = buildJsonPromptRange(lastInputs, daysArr);
-
-          const resp = await secureApiCall("generate-plan", {
-            endpoint: "gemini-1.5-flash:generateContent",
-            body: {
-              contents: [{ parts: [{ text: prompt }] }],
-              generationConfig: {
-                maxOutputTokens: 1400,
-                temperature: 0.7,
-                response_mime_type: "application/json",
-                response_schema: {
-                  type: "OBJECT",
-                  properties: {
-                    planTitle: { type: "STRING" },
-                    notes: { type: "STRING" },
-                    days: {
-                      type: "ARRAY",
-                      items: {
-                        type: "OBJECT",
-                        properties: {
-                          day: { type: "STRING" },
-                          summary: { type: "STRING" },
-                          totals: {
-                            type: "OBJECT",
-                            properties: {
-                              calories: { type: "NUMBER" },
-                              protein:  { type: "NUMBER" },
-                              carbs:    { type: "NUMBER" },
-                              fat:      { type: "NUMBER" }
-                            }
-                          },
-                          meals: {
-                            type: "ARRAY",
-                            items: {
+          async function tryOnce(maxTokens, temperature) {
+            const prompt = buildJsonPromptRange(lastInputs, daysArr);
+            const resp = await secureApiCall("generate-plan", {
+              endpoint: "gemini-1.5-flash:generateContent",
+              body: {
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: {
+                  maxOutputTokens: maxTokens,
+                  temperature,
+                  response_mime_type: "application/json",
+                  response_schema: {
+                    type: "OBJECT",
+                    properties: {
+                      planTitle: { type: "STRING" },
+                      notes: { type: "STRING" },
+                      days: {
+                        type: "ARRAY",
+                        items: {
+                          type: "OBJECT",
+                          properties: {
+                            day: { type: "STRING" },
+                            summary: { type: "STRING" },
+                            totals: {
                               type: "OBJECT",
                               properties: {
-                                name: { type: "STRING" },
-                                items: {
-                                  type: "ARRAY",
+                                calories: { type: "NUMBER" },
+                                protein:  { type: "NUMBER" },
+                                carbs:    { type: "NUMBER" },
+                                fat:      { type: "NUMBER" }
+                              }
+                            },
+                            meals: {
+                              type: "ARRAY",
+                              items: {
+                                type: "OBJECT",
+                                properties: {
+                                  name: { type: "STRING" },
                                   items: {
-                                    type: "OBJECT",
-                                    properties: {
-                                      title:   { type: "STRING" },
-                                      calories:{ type: "NUMBER" },
-                                      protein: { type: "NUMBER" },
-                                      carbs:   { type: "NUMBER" },
-                                      fat:     { type: "NUMBER" },
-                                      rationale:{ type: "STRING" },
-                                      tags:    { type: "ARRAY", items: { type: "STRING" } },
-                                      allergens:{ type: "ARRAY", items: { type: "STRING" } },
-                                      substitutions:{ type: "ARRAY", items: { type: "STRING" } },
-                                      prepTime:{ type: "NUMBER" },
-                                      cookTime:{ type: "NUMBER" },
-                                      ingredients: {
-                                        type: "ARRAY",
-                                        items: {
-                                          type: "OBJECT",
-                                          properties: {
-                                            item: { type: "STRING" },
-                                            qty:  { type: "NUMBER" },
-                                            unit: { type: "STRING" },
-                                            category: { type: "STRING" }
+                                    type: "ARRAY",
+                                    items: {
+                                      type: "OBJECT",
+                                      properties: {
+                                        title:   { type: "STRING" },
+                                        calories:{ type: "NUMBER" },
+                                        protein: { type: "NUMBER" },
+                                        carbs:   { type: "NUMBER" },
+                                        fat:     { type: "NUMBER" },
+                                        rationale:{ type: "STRING" },
+                                        tags:    { type: "ARRAY", items: { type: "STRING" } },
+                                        allergens:{ type: "ARRAY", items: { type: "STRING" } },
+                                        substitutions:{ type: "ARRAY", items: { type: "STRING" } },
+                                        prepTime:{ type: "NUMBER" },
+                                        cookTime:{ type: "NUMBER" },
+                                        ingredients: {
+                                          type: "ARRAY",
+                                          items: {
+                                            type: "OBJECT",
+                                            properties: {
+                                              item: { type: "STRING" },
+                                              qty:  { type: "NUMBER" },
+                                              unit: { type: "STRING" },
+                                              category: { type: "STRING" }
+                                            }
                                           }
-                                        }
+                                        },
+                                        steps: { type: "ARRAY", items: { type: "STRING" } }
                                       },
-                                      steps: { type: "ARRAY", items: { type: "STRING" } }
-                                    },
-                                    required: ["title","calories","protein","carbs","fat","ingredients","steps"]
+                                      required: ["title","calories","protein","carbs","fat","ingredients","steps"]
+                                    }
                                   }
                                 }
                               }
                             }
-                          }
-                        },
-                        required: ["day","meals"]
+                          },
+                          required: ["day","meals"]
+                        }
                       }
-                    }
-                  },
-                  required: ["days"]
+                    },
+                    required: ["days"]
+                  }
                 }
               }
-            }
-          });
+            });
 
-          const text = resp?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-          let partPlan = coercePlan(extractFirstJSON(text));
-          if (!partPlan || !Array.isArray(partPlan.days)) {
+            const text = getFirstPartText(resp);
+            if (!text) {
+              console.warn("Model returned no text. Full response:", resp);
+              return null;
+            }
+            let partPlan = coercePlan(extractFirstJSON(text));
+            if (!partPlan || !Array.isArray(partPlan.days)) {
+              console.warn("Failed to parse JSON. Raw text (first 400 chars):", String(text).slice(0,400));
+              return null;
+            }
+            if (needsRepair(partPlan)) {
+              partPlan = await repairPlan(partPlan, lastInputs);
+            }
+            return partPlan;
+          }
+
+          // First try (larger token budget), then a tighter retry
+          let planPart = await tryOnce(1400, 0.7);
+          if (!planPart) {
+            planPart = await tryOnce(1100, 0.4);
+          }
+          if (!planPart) {
             throw new Error("Plan format invalid.");
           }
-          if (needsRepair(partPlan)) {
-            partPlan = await repairPlan(partPlan, lastInputs);
-          }
-          return partPlan;
+          return planPart;
         }
 
         // Run both parts in parallel and merge
