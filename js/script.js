@@ -26,10 +26,15 @@
       });
       window.scrollTo({top:0,behavior:'smooth'});
     }
+    // Back-compat for older HTML that uses inline onclick handlers
+    window.nextStep = (i) => goToStep(Number(i));
+    window.prevStep = (i) => goToStep(Number(i));
     $('next-1')?.addEventListener('click',()=>goToStep(2));
     $('back-2')?.addEventListener('click',()=>goToStep(1));
     $('next-2')?.addEventListener('click',()=>goToStep(3));
     $('back-3')?.addEventListener('click',()=>goToStep(2));
+    // Ensure an initial visible step regardless of server HTML
+    goToStep(1);
 
     // Toast
     function showMessage(msg, ms=4000){ if(!messageBox||!messageText){ alert(msg); return; } messageText.textContent=msg; messageBox.classList.remove('hidden'); setTimeout(()=>messageBox.classList.add('hidden'),ms); }
