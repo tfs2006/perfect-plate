@@ -552,9 +552,16 @@
           const allergens = (it.allergens || []).length ? `<p class="text-xs text-rose-600 mt-2">Allergens: ${it.allergens.map(escapeHTML).join(", ")}</p>` : "";
           const subs = (it.substitutions || []).length ? `<p class="text-xs text-gray-500 mt-1">Substitutions: ${it.substitutions.map(escapeHTML).join("; ")}</p>` : "";
 
-          const ing = (it.ingredients || []).map(ing =>
-            `<li>${escapeHTML(ing.item)} — ${ing.qty ?? "-"} ${escapeHTML(ing.unit || "")}</li>`
-          ).join("");
+          const ing = (it.ingredients || []).map(ing => {
+            if (typeof ing === "string") {
+              return `<li>${escapeHTML(ing)}</li>`;
+            } else {
+              const item = ing?.item ?? "";
+              const qty = ing?.qty ?? "-";
+              const unit = ing?.unit || "";
+              return `<li>${escapeHTML(item)} — ${qty} ${escapeHTML(unit)}</li>`;
+            }
+          }).join("");
 
           const steps = (it.steps || []).map((s, idx) => `<li><span class="font-semibold mr-2">${idx+1}.</span>${escapeHTML(s)}</li>`).join("");
 
@@ -603,6 +610,29 @@
       </div>`;
     }
 
+    // Normalize ingredient entries that may be strings or objects
+    function normalizeIngredient(ing){
+      if (!ing) return null;
+      if (typeof ing === "object" && ing.item) {
+        return {
+          item: String(ing.item),
+          qty: (ing.qty != null ? Number(ing.qty) : null),
+          unit: ing.unit || "",
+          category: ing.category || "Other"
+        };
+      }
+      if (typeof ing === "string") {
+        const s = ing.trim();
+        // Try to parse patterns like "0.5 cup rolled oats" or "2 tbsp olive oil"
+        const m = s.match(/^(\d+(?:\.\d+)?)\s*(?:([a-zA-Z]+)\b)?\s*(.*)$/);
+        if (m && m[3]) {
+          return { item: m[3].trim(), qty: Number(m[1]), unit: m[2] || "", category: "Other" };
+        }
+        return { item: s, qty: null, unit: "", category: "Other" };
+      }
+      return null;
+    }
+
     // ---------- Grocery (grouped by category) ----------
     function buildGroceryGroups(plan) {
       const byKey = new Map();
@@ -620,8 +650,13 @@
         (d.meals || []).forEach(m =>
           (m.items || []).forEach(it => {
             if (Array.isArray(it.ingredients) && it.ingredients.length) {
-              usedIngredients = true;
-              it.ingredients.forEach(ing => { if (ing?.item) add(ing.item, ing.qty, ing.unit, ing.category); });
+              it.ingredients.forEach(ing => {
+                const n = normalizeIngredient(ing);
+                if (n && n.item) {
+                  add(n.item, n.qty, n.unit, n.category);
+                  usedIngredients = true;
+                }
+              });
             }
           })
         )
