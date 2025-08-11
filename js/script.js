@@ -16,6 +16,7 @@
   ready(() => {
     initIcons();
     let lastInputs = null;
+    let currentPlan = null;
 
     const API_BASE = (typeof window.API_BASE === "string" && window.API_BASE.trim())
       ? window.API_BASE.replace(/\/$/, "")
@@ -466,6 +467,7 @@
     // ---------- Rendering ----------
     function renderResults(plan, inputs) {
       // why card
+      currentPlan = plan;
       renderWhyCard(plan, inputs);
 
       const tabs = $("result-tabs");
@@ -494,6 +496,32 @@
       if (plan.days.length) activateTab("tab-0");
 
       $("grocery-list-button")?.addEventListener("click", () => renderGroceryList(buildGroceryGroups(plan)));
+
+      // Ensure a Download CSV button exists under the grocery button
+      (function ensureCsvButton(){
+        const glb = $("grocery-list-button");
+        const existing = document.getElementById("grocery-csv-button");
+        const attachHandler = (btn) => {
+          btn.addEventListener("click", () => {
+            const groups = buildGroceryGroups(currentPlan || plan);
+            const csv = groupsToCSV(groups);
+            downloadTextFile("grocery-list.csv", csv);
+          });
+        };
+        if (glb && !existing) {
+          const btn = document.createElement("button");
+          btn.id = "grocery-csv-button";
+          btn.type = "button";
+          btn.className = "mt-3 w-full bg-white text-gray-800 font-semibold py-3 px-4 rounded-lg hover:bg-gray-100 border border-gray-300";
+          btn.textContent = "Download CSV";
+          glb.insertAdjacentElement("afterend", btn);
+          attachHandler(btn);
+        } else if (existing) {
+          existing.onclick = null;
+          attachHandler(existing);
+        }
+      })();
+
       $("pdf-button")?.addEventListener("click", downloadPDF);
       $("refine-button")?.addEventListener("click", () => {
         resultContainer.style.display = "none";
@@ -632,7 +660,15 @@
 
       return cats.map(cat => {
         const items = groupsMap.get(cat).sort((a,b)=>a.item.localeCompare(b.item));
-        return { category: cat, items: items.map(x => ({ label: `${x.item}${x.qty ? ` — ${fmt(x.qty)} ${x.unit}` : ""}` })) };
+        return {
+          category: cat,
+          items: items.map(x => ({
+            label: `${x.item}${x.qty ? ` — ${fmt(x.qty)} ${x.unit}` : ""}`,
+            item: x.item,
+            qty: x.qty,
+            unit: x.unit
+          }))
+        };
       });
     }
 
@@ -660,6 +696,31 @@
         wrap.appendChild(ul);
         box.appendChild(wrap);
       });
+    }
+
+    // ---------- CSV helpers ----------
+    function csvEscape(v){
+      if (v == null) return "";
+      const s = String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    }
+    function groupsToCSV(groups){
+      const rows = [["Category","Item","Qty","Unit"]];
+      groups.forEach(g => {
+        (g.items || []).forEach(it => {
+          rows.push([g.category || "", it.item || "", it.qty != null ? fmt(it.qty) : "", it.unit || ""]);
+        });
+      });
+      return rows.map(r => r.map(csvEscape).join(",")).join("\n");
+    }
+    function downloadTextFile(filename, text){
+      const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
     }
 
     // ---------- PDF ----------
