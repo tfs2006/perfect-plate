@@ -123,62 +123,59 @@
     }
 
     // ---------- Prompt (detailed) ----------
-    function buildJsonPrompt(i) {
+    function buildJsonPromptRange(i, daysArray) {
       const profile = {
         age: i.age, gender: i.gender, ethnicity: i.ethnicity,
         goal: i.fitnessGoal, dietPrefs: i.dietaryPrefs, exclusions: i.exclusions,
         medicalConditions: i.medicalConditions
       };
 
-      return `Return STRICT JSON ONLY (no markdown) that matches this shape exactly:
+      const daysList = daysArray.join(", ");
 
-{
-  "planTitle": "string",
-  "notes": "string",
-  "days": [
-    {
-      "day": "Monday",
-      "summary": "1-2 sentence overview for the day referencing the user's goals/conditions/preferences",
-      "totals": {"calories": 1800, "protein": 120, "carbs": 180, "fat": 60},
-      "meals": [
-        {
-          "name": "Breakfast",
-          "items": [
-            {
-              "title": "Oatmeal with Berries",
-              "calories": 350, "protein": 20, "carbs": 55, "fat": 9,
-              "rationale": "Why this fits the user's profile (goal, conditions, culture, exclusions).",
-              "tags": ["High-fiber","Budget-friendly"],
-              "allergens": ["gluten"],
-              "substitutions": ["use gluten-free oats"],
-              "prepTime": 5, "cookTime": 5,
-              "ingredients": [
-                {"item":"Rolled oats","qty":0.75,"unit":"cup","category":"Grains"},
-                {"item":"Blueberries","qty":0.5,"unit":"cup","category":"Produce"},
-                {"item":"Milk","qty":1,"unit":"cup","category":"Dairy"}
-              ],
-              "steps": [
-                "Simmer oats in milk 5 min.",
-                "Top with blueberries."
-              ]
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
+      return `Return STRICT JSON ONLY (no markdown) with this schema:
 
-Rules:
-- Exactly 7 days: Monday..Sunday.
-- EVERY meal MUST have 1–2 items; each item MUST include ingredients[] and steps[] with at least 1 entry.
-- Use integers for calories/protein/carbs/fat, prepTime, cookTime (round if needed).
-- Respect medical conditions: ${i.medicalConditions || 'None'}; exclusions: ${i.exclusions || 'None'}.
-- Cultural background: ${i.ethnicity}; goal: ${i.fitnessGoal}; diet prefs: ${(i.dietaryPrefs||[]).join(', ') || 'None'}; age ${i.age}; gender ${i.gender}.
-- Prefer common US grocery items; keep titles under 60 chars.
-- Keep quantities small/realistic; ingredients categorized as one of: Produce, Protein, Grains, Dairy, Pantry, Frozen, Other.
+  {
+    "planTitle": "string",
+    "notes": "string",
+    "days": [
+      {
+        "day": "Monday",
+        "summary": "1-2 sentence overview tied to the user's goals/conditions/preferences",
+        "totals": {"calories": 1800, "protein": 120, "carbs": 180, "fat": 60},
+        "meals": [
+          {
+            "name": "Breakfast",
+            "items": [
+              {
+                "title": "Oatmeal with Berries",
+                "calories": 350, "protein": 20, "carbs": 55, "fat": 9,
+                "rationale": "Why this fits the user's profile.",
+                "tags": ["High-fiber"],
+                "allergens": [],
+                "substitutions": [],
+                "prepTime": 5, "cookTime": 5,
+                "ingredients": [
+                  {"item":"Rolled oats","qty":0.75,"unit":"cup","category":"Grains"},
+                  {"item":"Blueberries","qty":0.5,"unit":"cup","category":"Produce"}
+                ],
+                "steps": ["Simmer oats in milk.", "Top with berries."]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
 
-User profile (for rationale): ${JSON.stringify(profile)}`;
+  Rules:
+  - Output ONLY these days (inclusive, in order): ${daysList}.
+  - EVERY meal MUST have 1–2 items; each item MUST include ingredients[] and steps[].
+  - Use integers for calories/protein/carbs/fat, prepTime, cookTime (round if needed).
+  - Respect medical conditions: ${i.medicalConditions || 'None'}; exclusions: ${i.exclusions || 'None'}.
+  - Cultural background: ${i.ethnicity}; goal: ${i.fitnessGoal}; diet prefs: ${(i.dietaryPrefs||[]).join(', ') || 'None'}; age ${i.age}; gender ${i.gender}.
+  - Prefer common US grocery items; keep titles under 60 chars.
+
+  User profile (for rationale): ${JSON.stringify(profile)}`;
     }
 
     // ---------- JSON helpers ----------
@@ -302,103 +299,119 @@ User profile (for rationale): ${JSON.stringify(profile)}`;
       const dietaryPrefs = Array.from(document.querySelectorAll('input[name="diet"]:checked')).map(el => el.value);
       lastInputs = { age, gender, ethnicity, medicalConditions, fitnessGoal, exclusions, dietaryPrefs, goal: fitnessGoal };
 
-      const prompt = buildJsonPrompt(lastInputs);
-
       formContainer.style.display = "none";
       showLoader();
 
       try {
-        // Request STRICT JSON with schema
-        const textResult = await secureApiCall("generate-plan", {
-          endpoint: "gemini-1.5-flash:generateContent",
-          body: {
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              response_mime_type: "application/json",
-              response_schema: {
-                type: "OBJECT",
-                properties: {
-                  planTitle: { type: "STRING" },
-                  notes: { type: "STRING" },
-                  days: {
-                    type: "ARRAY",
-                    items: {
-                      type: "OBJECT",
-                      properties: {
-                        day: { type: "STRING" },
-                        summary: { type: "STRING" },
-                        totals: {
-                          type: "OBJECT",
-                          properties: {
-                            calories: { type: "NUMBER" },
-                            protein:  { type: "NUMBER" },
-                            carbs:    { type: "NUMBER" },
-                            fat:      { type: "NUMBER" }
-                          }
-                        },
-                        meals: {
-                          type: "ARRAY",
-                          items: {
+        // Split generation to avoid Netlify 504 (Mon–Wed) + (Thu–Sun)
+        const DAY_BLOCKS = [
+          ["Monday","Tuesday","Wednesday"],
+          ["Thursday","Friday","Saturday","Sunday"]
+        ];
+
+        async function generateDays(daysArr) {
+          const prompt = buildJsonPromptRange(lastInputs, daysArr);
+
+          const resp = await secureApiCall("generate-plan", {
+            endpoint: "gemini-1.5-flash:generateContent",
+            body: {
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: {
+                maxOutputTokens: 1400,
+                temperature: 0.7,
+                response_mime_type: "application/json",
+                response_schema: {
+                  type: "OBJECT",
+                  properties: {
+                    planTitle: { type: "STRING" },
+                    notes: { type: "STRING" },
+                    days: {
+                      type: "ARRAY",
+                      items: {
+                        type: "OBJECT",
+                        properties: {
+                          day: { type: "STRING" },
+                          summary: { type: "STRING" },
+                          totals: {
                             type: "OBJECT",
                             properties: {
-                              name: { type: "STRING" },
-                              items: {
-                                type: "ARRAY",
+                              calories: { type: "NUMBER" },
+                              protein:  { type: "NUMBER" },
+                              carbs:    { type: "NUMBER" },
+                              fat:      { type: "NUMBER" }
+                            }
+                          },
+                          meals: {
+                            type: "ARRAY",
+                            items: {
+                              type: "OBJECT",
+                              properties: {
+                                name: { type: "STRING" },
                                 items: {
-                                  type: "OBJECT",
-                                  properties: {
-                                    title:   { type: "STRING" },
-                                    calories:{ type: "NUMBER" },
-                                    protein: { type: "NUMBER" },
-                                    carbs:   { type: "NUMBER" },
-                                    fat:     { type: "NUMBER" },
-                                    rationale:{ type: "STRING" },
-                                    tags:    { type: "ARRAY", items: { type: "STRING" } },
-                                    allergens:{ type: "ARRAY", items: { type: "STRING" } },
-                                    substitutions:{ type: "ARRAY", items: { type: "STRING" } },
-                                    prepTime:{ type: "NUMBER" },
-                                    cookTime:{ type: "NUMBER" },
-                                    ingredients: {
-                                      type: "ARRAY",
-                                      items: {
-                                        type: "OBJECT",
-                                        properties: {
-                                          item: { type: "STRING" },
-                                          qty:  { type: "NUMBER" },
-                                          unit: { type: "STRING" },
-                                          category: { type: "STRING" }
+                                  type: "ARRAY",
+                                  items: {
+                                    type: "OBJECT",
+                                    properties: {
+                                      title:   { type: "STRING" },
+                                      calories:{ type: "NUMBER" },
+                                      protein: { type: "NUMBER" },
+                                      carbs:   { type: "NUMBER" },
+                                      fat:     { type: "NUMBER" },
+                                      rationale:{ type: "STRING" },
+                                      tags:    { type: "ARRAY", items: { type: "STRING" } },
+                                      allergens:{ type: "ARRAY", items: { type: "STRING" } },
+                                      substitutions:{ type: "ARRAY", items: { type: "STRING" } },
+                                      prepTime:{ type: "NUMBER" },
+                                      cookTime:{ type: "NUMBER" },
+                                      ingredients: {
+                                        type: "ARRAY",
+                                        items: {
+                                          type: "OBJECT",
+                                          properties: {
+                                            item: { type: "STRING" },
+                                            qty:  { type: "NUMBER" },
+                                            unit: { type: "STRING" },
+                                            category: { type: "STRING" }
+                                          }
                                         }
-                                      }
+                                      },
+                                      steps: { type: "ARRAY", items: { type: "STRING" } }
                                     },
-                                    steps: { type: "ARRAY", items: { type: "STRING" } }
-                                  },
-                                  required: ["title","calories","protein","carbs","fat","ingredients","steps"]
+                                    required: ["title","calories","protein","carbs","fat","ingredients","steps"]
+                                  }
                                 }
                               }
                             }
                           }
-                        }
-                      },
-                      required: ["day","meals"]
+                        },
+                        required: ["day","meals"]
+                      }
                     }
-                  }
-                },
-                required: ["days"]
+                  },
+                  required: ["days"]
+                }
               }
             }
+          });
+
+          const text = resp?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          let partPlan = coercePlan(extractFirstJSON(text));
+          if (!partPlan || !Array.isArray(partPlan.days)) {
+            throw new Error("Plan format invalid.");
           }
-        });
-
-        const rawText = textResult?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        let plan = coercePlan(extractFirstJSON(rawText));
-        if (!plan || !Array.isArray(plan.days)) {
-          console.warn("Model raw response (first 400 chars):", String(rawText).slice(0, 400));
-          throw new Error("Plan format invalid.");
+          if (needsRepair(partPlan)) {
+            partPlan = await repairPlan(partPlan, lastInputs);
+          }
+          return partPlan;
         }
 
-        if (needsRepair(plan)) {
-          plan = await repairPlan(plan, lastInputs);
-        }
+        // Run both parts in parallel and merge
+        const [p1, p2] = await Promise.all(DAY_BLOCKS.map(generateDays));
+        let plan = {
+          planTitle: p1.planTitle || "Your 7-Day Plan",
+          notes: [p1.notes, p2.notes].filter(Boolean).join(" "),
+          days: [...(p1.days || []), ...(p2.days || [])]
+        };
 
         ensureDayTotals(plan);
         renderResults(plan, lastInputs);
