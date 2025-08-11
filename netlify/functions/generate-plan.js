@@ -1,6 +1,5 @@
 // Netlify Function: Gemini proxy with multi-origin CORS
 exports.handler = async (event) => {
-  // ALLOWED_ORIGIN can be comma-separated, e.g. "https://tfs2006.github.io,https://perfect-plate-app.netlify.app"
   const originsEnv = process.env.ALLOWED_ORIGIN || "*";
   const allowedList = originsEnv.split(",").map(s => s.trim()).filter(Boolean);
   const reqOrigin = event.headers?.origin || event.headers?.Origin || "";

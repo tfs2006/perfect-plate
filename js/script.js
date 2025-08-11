@@ -1,4 +1,4 @@
-// PERFECT-PLATE – Frontend App (detailed recipes + ingredient grocery list)
+// PERFECT-PLATE – Frontend App (detailed recipes + rationale + grouped grocery)
 (function () {
   // ---------- Utilities ----------
   const $ = (id) => document.getElementById(id);
@@ -9,10 +9,13 @@
   const initIcons = () => { if (window.lucide?.createIcons) { try { window.lucide.createIcons(); } catch {} } };
   const getJsPDF = () => (window.jspdf && window.jspdf.jsPDF) ? window.jspdf.jsPDF : null;
   const debounce = (fn, wait) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), wait); }; };
+  const fmt = (x) => (x == null || isNaN(Number(x))) ? "-" : Number(x).toFixed(0);
+  const escapeHTML = (s) => String(s).replace(/[&<>\"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", "\"":"&quot;", "'":"&#39;" }[c]));
 
   // ---------- App ----------
   ready(() => {
     initIcons();
+    let lastInputs = null;
 
     const API_BASE = (typeof window.API_BASE === "string" && window.API_BASE.trim())
       ? window.API_BASE.replace(/\/$/, "")
@@ -47,7 +50,6 @@
       });
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
-    // Fallback for old inline handlers
     window.nextStep = (i) => goToStep(Number(i));
     window.prevStep = (i) => goToStep(Number(i));
 
@@ -65,7 +67,7 @@
       setTimeout(() => messageBox.classList.add("hidden"), ms);
     }
 
-    // ---------- Loader helpers ----------
+    // ---------- Loader ----------
     const showLoader = () => { if (loader) { loader.classList.remove("hidden"); loader.style.display = "flex"; } };
     const hideLoader = () => { if (loader) loader.style.display = "none"; };
 
@@ -247,6 +249,45 @@ User profile (for rationale): ${JSON.stringify(profile)}`;
       return fixed || plan;
     }
 
+    // ---------- Totals helper (fallback if model omits day.totals) ----------
+    function ensureDayTotals(plan){
+      (plan.days || []).forEach(d => {
+        if (!d || !Array.isArray(d.meals)) return;
+        let c=0,p=0,cb=0,f=0;
+        d.meals.forEach(m => (m.items||[]).forEach(it => { c+=+it.calories||0; p+=+it.protein||0; cb+=+it.carbs||0; f+=+it.fat||0; }));
+        if (!d.totals) d.totals = { calories: Math.round(c), protein: Math.round(p), carbs: Math.round(cb), fat: Math.round(f) };
+      });
+    }
+
+    // ---------- Why-this-plan card ----------
+    function buildWhyThisPlan(plan, inputs){
+      const bullets = new Map();
+      (plan.days||[]).forEach(d => (d.meals||[]).forEach(m => (m.items||[]).forEach(it => {
+        const r = (it.rationale||"").trim();
+        if (r) bullets.set(r, (bullets.get(r)||0)+1);
+      })));
+      const top = Array.from(bullets.entries()).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([t])=>t);
+
+      const bits = [];
+      if (inputs.goal) bits.push(`goal of **${inputs.goal}**`);
+      if (inputs.dietaryPrefs?.length) bits.push(`diet: **${inputs.dietaryPrefs.join(", ")}**`);
+      if (inputs.exclusions) bits.push(`exclusions: **${inputs.exclusions}**`);
+      if (inputs.medicalConditions) bits.push(`conditions: **${inputs.medicalConditions}**`);
+      if (inputs.ethnicity) bits.push(`cultural cues: **${inputs.ethnicity}**`);
+
+      const summary = `Built for your ${bits.join(" • ")}. Portions and macros are balanced across the day to support your profile.`;
+      return { summary, bullets: top };
+    }
+
+    function renderWhyCard(plan, inputs){
+      const card = $("why-card"), list = $("why-bullets"), sum = $("why-summary");
+      if (!card || !list || !sum) return;
+      const { summary, bullets } = buildWhyThisPlan(plan, inputs);
+      sum.innerHTML = escapeHTML(summary).replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+      list.innerHTML = bullets.length ? bullets.map(b=>`<li>${escapeHTML(b)}</li>`).join("") : "<li>No special rationale provided.</li>";
+      card.classList.remove("hidden");
+    }
+
     // ---------- Submit ----------
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -259,8 +300,9 @@ User profile (for rationale): ${JSON.stringify(profile)}`;
       const fitnessGoal = $("fitness-goal").value;
       const exclusions = $("exclusions").value.trim();
       const dietaryPrefs = Array.from(document.querySelectorAll('input[name="diet"]:checked')).map(el => el.value);
+      lastInputs = { age, gender, ethnicity, medicalConditions, fitnessGoal, exclusions, dietaryPrefs, goal: fitnessGoal };
 
-      const prompt = buildJsonPrompt({ age, gender, ethnicity, medicalConditions, fitnessGoal, exclusions, dietaryPrefs });
+      const prompt = buildJsonPrompt(lastInputs);
 
       formContainer.style.display = "none";
       showLoader();
@@ -355,10 +397,11 @@ User profile (for rationale): ${JSON.stringify(profile)}`;
         }
 
         if (needsRepair(plan)) {
-          plan = await repairPlan(plan, { age, gender, ethnicity, medicalConditions, fitnessGoal, exclusions, dietaryPrefs });
+          plan = await repairPlan(plan, lastInputs);
         }
 
-        renderResults(plan);
+        ensureDayTotals(plan);
+        renderResults(plan, lastInputs);
 
         // Optional image (best-effort; non-fatal)
         try {
@@ -382,7 +425,10 @@ User profile (for rationale): ${JSON.stringify(profile)}`;
     });
 
     // ---------- Rendering ----------
-    function renderResults(plan) {
+    function renderResults(plan, inputs) {
+      // why card
+      renderWhyCard(plan, inputs);
+
       const tabs = $("result-tabs");
       const content = $("tab-content");
       if (!plan || !Array.isArray(plan.days)) throw new Error("Plan format invalid.");
@@ -408,7 +454,7 @@ User profile (for rationale): ${JSON.stringify(profile)}`;
 
       if (plan.days.length) activateTab("tab-0");
 
-      $("grocery-list-button")?.addEventListener("click", () => renderGroceryList(buildGroceryList(plan)));
+      $("grocery-list-button")?.addEventListener("click", () => renderGroceryList(buildGroceryGroups(plan)));
       $("pdf-button")?.addEventListener("click", downloadPDF);
       $("refine-button")?.addEventListener("click", () => {
         resultContainer.style.display = "none";
@@ -490,15 +536,13 @@ User profile (for rationale): ${JSON.stringify(profile)}`;
       </div>`;
     }
 
-    const fmt = (x) => (x == null || isNaN(Number(x))) ? "-" : Number(x).toFixed(0);
-    const escapeHTML = (s) => String(s).replace(/[&<>\"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", "\"":"&quot;", "'":"&#39;" }[c]));
-
-    // ---------- Grocery list from ingredients (with quantity merge) ----------
-    function buildGroceryList(plan) {
+    // ---------- Grocery (grouped by category) ----------
+    function buildGroceryGroups(plan) {
       const byKey = new Map();
       const add = (item, qty, unit, category) => {
-        const key = `${item.toLowerCase()}|${(unit||'').toLowerCase()}`;
-        const prev = byKey.get(key) || { item, qty: 0, unit: unit || "", category: category || "Other" };
+        const cat = (category || "Other").trim() || "Other";
+        const key = `${cat}||${item.toLowerCase()}|${(unit||'').toLowerCase()}`;
+        const prev = byKey.get(key) || { item, qty: 0, unit: unit || "", category: cat };
         prev.qty += (Number(qty) || 0);
         byKey.set(key, prev);
       };
@@ -516,43 +560,67 @@ User profile (for rationale): ${JSON.stringify(profile)}`;
         )
       );
 
-      if (usedIngredients) {
-        return Array.from(byKey.values())
-          .sort((a, b) => a.item.localeCompare(b.item))
-          .map(x => ({ item: `${x.item}${x.qty ? ` — ${fmt(x.qty)} ${x.unit}` : ""}`, count: 1, category: x.category }));
+      // If model gave no ingredients, fallback to titles in "Other"
+      if (!usedIngredients) {
+        (plan.days || []).forEach(d =>
+          (d.meals || []).forEach(m =>
+            (m.items || []).forEach(it => {
+              const name = (it.title || "").trim();
+              if (!name) return;
+              add(name, 1, "", "Other");
+            })
+          )
+        );
       }
 
-      // Fallback: titles
-      const f = new Map();
-      (plan.days || []).forEach(d =>
-        (d.meals || []).forEach(m =>
-          (m.items || []).forEach(it => {
-            const name = (it.title || "").toLowerCase();
-            if (!name) return;
-            const key = name.split(/[,+()\-\u2013]/)[0].trim();
-            if (!key) return;
-            f.set(key, (f.get(key) || 0) + 1);
-          })
-        )
-      );
-      return Array.from(f.entries())
-        .sort((a, b) => b[1] - a[1])
-        .map(([item, count]) => ({ item, count }));
+      // Group by category
+      const groupsMap = new Map();
+      Array.from(byKey.values()).forEach(v => {
+        const arr = groupsMap.get(v.category) || [];
+        arr.push(v);
+        groupsMap.set(v.category, arr);
+      });
+
+      // Sort categories in a friendly order
+      const order = ["Produce","Protein","Grains","Dairy","Pantry","Frozen","Other"];
+      const cats = Array.from(groupsMap.keys()).sort((a,b) => {
+        const ia = order.indexOf(a), ib = order.indexOf(b);
+        if (ia === -1 && ib === -1) return a.localeCompare(b);
+        if (ia === -1) return 1;
+        if (ib === -1) return -1;
+        return ia - ib;
+      });
+
+      return cats.map(cat => {
+        const items = groupsMap.get(cat).sort((a,b)=>a.item.localeCompare(b.item));
+        return { category: cat, items: items.map(x => ({ label: `${x.item}${x.qty ? ` — ${fmt(x.qty)} ${x.unit}` : ""}` })) };
+      });
     }
 
-    function renderGroceryList(list) {
+    function renderGroceryList(groups) {
       const box = $("grocery-list-container"); if (!box) return;
       box.innerHTML = "";
-      if (!list.length) { box.innerHTML = '<p class="text-sm text-gray-500">Generate a plan first.</p>'; return; }
-      const ul = document.createElement("ul"); ul.className = "space-y-2";
-      list.forEach(({ item, count }) => {
-        const li = document.createElement("li"); li.className = "flex items-center gap-3";
-        li.innerHTML = `<input type="checkbox" class="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500">
-          <span class="flex-1">${escapeHTML(item)}</span>
-          <span class="text-xs text-gray-500">${count > 1 ? `x${count}` : ""}</span>`;
-        ul.appendChild(li);
+      if (!groups.length) { box.innerHTML = '<p class="text-sm text-gray-500">Generate a plan first.</p>'; return; }
+
+      groups.forEach(group => {
+        const wrap = document.createElement("div");
+        const title = document.createElement("div");
+        title.className = "grocery-category";
+        title.textContent = group.category;
+        wrap.appendChild(title);
+
+        const ul = document.createElement("ul");
+        ul.className = "space-y-2";
+        group.items.forEach(({ label }) => {
+          const li = document.createElement("li");
+          li.className = "flex items-center gap-3";
+          li.innerHTML = `<input type="checkbox" class="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500">
+            <span class="flex-1">${escapeHTML(label)}</span>`;
+          ul.appendChild(li);
+        });
+        wrap.appendChild(ul);
+        box.appendChild(wrap);
       });
-      box.appendChild(ul);
     }
 
     // ---------- PDF ----------
