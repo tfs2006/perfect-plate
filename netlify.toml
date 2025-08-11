@@ -2,7 +2,7 @@
   publish = "/"
   functions = "netlify/functions"
 
-# Optional proxy if you ever want /api/* to map to functions when using the Netlify site
+# Optional proxy if you ever want /api/* to map to functions on the Netlify site:
 # [[redirects]]
 #   from = "/api/*"
 #   to   = "/.netlify/functions/:splat"

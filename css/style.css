@@ -8,7 +8,7 @@ body { font-family: 'Inter', sans-serif; background-color: #f7fafc; }
 
 /* Steps */
 .form-step { display: none; }
-.form-step.active { display: block; animation: fadeIn .4s ease-in-out; }
+.form-step.active { display: block; animation: fadeIn .35s ease-in-out; }
 @keyframes fadeIn { from { opacity:.0; transform: translateY(8px);} to { opacity:1; transform: translateY(0);} }
 .step-indicator { transition: all .3s ease; transform-origin: left; }
 

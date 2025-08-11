@@ -1,4 +1,4 @@
-// PERFECT-PLATE – Frontend App (robust, production-safe)
+// PERFECT-PLATE – Frontend App (detailed recipes + ingredient grocery list)
 (function () {
   // ---------- Utilities ----------
   const $ = (id) => document.getElementById(id);
@@ -47,7 +47,7 @@
       });
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
-    // Support inline handlers if they exist in HTML
+    // Fallback for old inline handlers
     window.nextStep = (i) => goToStep(Number(i));
     window.prevStep = (i) => goToStep(Number(i));
 
@@ -55,7 +55,7 @@
     $("back-2")?.addEventListener("click", () => goToStep(1));
     $("next-2")?.addEventListener("click", () => goToStep(3));
     $("back-3")?.addEventListener("click", () => goToStep(2));
-    goToStep(1); // ensure initial state
+    goToStep(1);
 
     // ---------- Toast ----------
     function showMessage(msg, ms = 4000) {
@@ -66,15 +66,8 @@
     }
 
     // ---------- Loader helpers ----------
-    function showLoader() {
-      if (!loader) return;
-      loader.classList.remove("hidden");
-      loader.style.display = "flex";
-    }
-    function hideLoader() {
-      if (!loader) return;
-      loader.style.display = "none";
-    }
+    const showLoader = () => { if (loader) { loader.classList.remove("hidden"); loader.style.display = "flex"; } };
+    const hideLoader = () => { if (loader) loader.style.display = "none"; };
 
     // ---------- Persist inputs ----------
     const FIELDS = ["age", "gender", "ethnicity", "medical-conditions", "exclusions", "fitness-goal"];
@@ -89,12 +82,7 @@
         const raw = localStorage.getItem("pp_state"); if (!raw) return;
         const d = JSON.parse(raw);
         FIELDS.forEach(id => { if (d[id] != null && $(id)) $(id).value = d[id]; });
-        if (Array.isArray(d.diet)) {
-          d.diet.forEach(v => {
-            const el = document.querySelector(`input[name="diet"][value="${v}"]`);
-            if (el) el.checked = true;
-          });
-        }
+        if (Array.isArray(d.diet)) d.diet.forEach(v => { const el = document.querySelector(`input[name="diet"][value="${v}"]`); if (el) el.checked = true; });
       } catch {}
     }
     loadState();
@@ -104,13 +92,9 @@
     async function secureApiCall(path, payload) {
       const base = API_BASE || "";
       if (!base) throw new Error("No API_BASE configured. Set window.API_BASE in js/config.js to your Netlify Functions URL.");
-
-      // prevent mixed content (https page -> http api)
       if (location.protocol === "https:" && /^http:\/\//i.test(base)) {
         throw new Error(`Mixed content blocked: page is HTTPS but API_BASE is HTTP ("${base}"). Use your HTTPS Netlify URL.`);
       }
-
-      // collapse accidental double slashes but keep protocol
       const url = (`${base}/${path}`).replace(/([^:]\/)\/+/g, "$1");
       console.log("[Perfect-Plate] POST", url, { origin: location.origin });
 
@@ -136,19 +120,71 @@
       }
     }
 
+    // ---------- Prompt (detailed) ----------
     function buildJsonPrompt(i) {
-      return `Return STRICT JSON ONLY (no markdown) matching EXACTLY this shape:\n\n{\n  "planTitle": "string",\n  "days": [\n    {\n      "day": "Monday",\n      "meals": [\n        {"name":"Breakfast","items":[{"title":"Greek yogurt with berries","calories":350,"protein":25,"carbs":40,"fat":10}]},\n        {"name":"Lunch","items":[{"title":"Chicken salad bowl","calories":520,"protein":45,"carbs":32,"fat":22}]},\n        {"name":"Snack","items":[{"title":"Apple + peanut butter","calories":250,"protein":8,"carbs":28,"fat":12}]},\n        {"name":"Dinner","items":[{"title":"Salmon, quinoa, broccoli","calories":650,"protein":45,"carbs":50,"fat":24}]}\n      ]\n    }\n  ],\n  "notes": "string"\n}\n\nRules:\n- Exactly 7 days: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday.\n- Every meal MUST have 1–2 items. No empty arrays. No nulls.\n- Use integers for calories, protein, carbs, fat (round if needed).\n- Respect medical conditions: ${i.medicalConditions || 'None'}; exclusions: ${i.exclusions || 'None'}.\n- Cultural background: ${i.ethnicity}; goal: ${i.fitnessGoal}; diet prefs: ${(i.dietaryPrefs || []).join(', ') || 'None'}; age ${i.age}, gender ${i.gender}.\n- Use common US grocery foods; keep titles under 60 chars.`;
+      const profile = {
+        age: i.age, gender: i.gender, ethnicity: i.ethnicity,
+        goal: i.fitnessGoal, dietPrefs: i.dietaryPrefs, exclusions: i.exclusions,
+        medicalConditions: i.medicalConditions
+      };
+
+      return `Return STRICT JSON ONLY (no markdown) that matches this shape exactly:
+
+{
+  "planTitle": "string",
+  "notes": "string",
+  "days": [
+    {
+      "day": "Monday",
+      "summary": "1-2 sentence overview for the day referencing the user's goals/conditions/preferences",
+      "totals": {"calories": 1800, "protein": 120, "carbs": 180, "fat": 60},
+      "meals": [
+        {
+          "name": "Breakfast",
+          "items": [
+            {
+              "title": "Oatmeal with Berries",
+              "calories": 350, "protein": 20, "carbs": 55, "fat": 9,
+              "rationale": "Why this fits the user's profile (goal, conditions, culture, exclusions).",
+              "tags": ["High-fiber","Budget-friendly"],
+              "allergens": ["gluten"],
+              "substitutions": ["use gluten-free oats"],
+              "prepTime": 5, "cookTime": 5,
+              "ingredients": [
+                {"item":"Rolled oats","qty":0.75,"unit":"cup","category":"Grains"},
+                {"item":"Blueberries","qty":0.5,"unit":"cup","category":"Produce"},
+                {"item":"Milk","qty":1,"unit":"cup","category":"Dairy"}
+              ],
+              "steps": [
+                "Simmer oats in milk 5 min.",
+                "Top with blueberries."
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+Rules:
+- Exactly 7 days: Monday..Sunday.
+- EVERY meal MUST have 1–2 items; each item MUST include ingredients[] and steps[] with at least 1 entry.
+- Use integers for calories/protein/carbs/fat, prepTime, cookTime (round if needed).
+- Respect medical conditions: ${i.medicalConditions || 'None'}; exclusions: ${i.exclusions || 'None'}.
+- Cultural background: ${i.ethnicity}; goal: ${i.fitnessGoal}; diet prefs: ${(i.dietaryPrefs||[]).join(', ') || 'None'}; age ${i.age}; gender ${i.gender}.
+- Prefer common US grocery items; keep titles under 60 chars.
+- Keep quantities small/realistic; ingredients categorized as one of: Produce, Protein, Grains, Dairy, Pantry, Frozen, Other.
+
+User profile (for rationale): ${JSON.stringify(profile)}`;
     }
 
-    // Robust JSON extractor (handles code fences and stray prose)
+    // ---------- JSON helpers ----------
     function extractFirstJSON(text) {
       if (!text) return null;
       let cleaned = String(text).replace(/```(?:json)?/gi, "").trim();
       try { return JSON.parse(cleaned); } catch {}
-
-      // find first balanced {...}
-      const start = cleaned.indexOf("{");
-      if (start === -1) return null;
+      const start = cleaned.indexOf("{"); if (start === -1) return null;
       let depth = 0, inStr = false, esc = false;
       for (let i = start; i < cleaned.length; i++) {
         const ch = cleaned[i];
@@ -159,28 +195,22 @@
         } else {
           if (ch === '"') inStr = true;
           else if (ch === "{") depth++;
-          else if (ch === "}") {
-            depth--;
-            if (depth === 0) {
-              const slice = cleaned.slice(start, i + 1);
-              try { return JSON.parse(slice); } catch { return null; }
-            }
-          }
+          else if (ch === "}") { depth--; if (depth === 0) {
+            const slice = cleaned.slice(start, i + 1);
+            try { return JSON.parse(slice); } catch { return null; }
+          }}
         }
       }
       return null;
     }
 
-    // Coerce loosely-structured model output into our expected shape
     function coercePlan(obj){
       if (!obj) return null;
-      // If the model wrapped the plan
       if (Array.isArray(obj.days)) return obj;
       if (Array.isArray(obj.plan?.days)) return obj.plan;
       if (Array.isArray(obj.weekPlan?.days)) return obj.weekPlan;
       if (Array.isArray(obj.week?.days)) return obj.week;
-      // If it returned an array directly, treat it as days
-      if (Array.isArray(obj)) return { planTitle: '7‑Day Plan', days: obj, notes: '' };
+      if (Array.isArray(obj)) return { planTitle: "7-Day Plan", days: obj, notes: "" };
       return null;
     }
 
@@ -189,6 +219,10 @@
       (plan.days || []).forEach(d =>
         (d.meals || []).forEach(m => {
           if (!Array.isArray(m.items) || m.items.length === 0) bad = true;
+          (m.items || []).forEach(it => {
+            if (!Array.isArray(it.ingredients) || !it.ingredients.length) bad = true;
+            if (!Array.isArray(it.steps) || !it.steps.length) bad = true;
+          });
         })
       );
       return bad;
@@ -196,18 +230,18 @@
 
     async function repairPlan(plan, inputs){
       const repairPrompt =
-        `Fix this JSON so EVERY meal has at least 1 item with {title, calories, protein, carbs, fat} (integers). ` +
+        `Fix this JSON so EVERY meal has at least 1 item with {title, calories, protein, carbs, fat} (integers), and each item has non-empty ingredients[] and steps[]. ` +
         `Keep the same days and meal names. Respect medical conditions/exclusions/culture/goal from context. ` +
         `Return JSON ONLY in the same schema.\n\nContext: ${JSON.stringify(inputs)}\n\nCurrent JSON:\n${JSON.stringify(plan)}`;
 
-      const fixRes = await secureApiCall('generate-plan', {
-        endpoint: 'gemini-1.5-flash:generateContent',
+      const fixRes = await secureApiCall("generate-plan", {
+        endpoint: "gemini-1.5-flash:generateContent",
         body: {
           contents: [{ parts: [{ text: repairPrompt }] }],
-          generationConfig: { response_mime_type: 'application/json' }
+          generationConfig: { response_mime_type: "application/json" }
         }
       });
-      const raw = fixRes?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const raw = fixRes?.candidates?.[0]?.content?.parts?.[0]?.text || "";
       let fixed = extractFirstJSON(raw);
       fixed = coercePlan(fixed);
       return fixed || plan;
@@ -232,7 +266,7 @@
       showLoader();
 
       try {
-        // Ask the model for STRICT JSON (schema + mime type)
+        // Request STRICT JSON with schema
         const textResult = await secureApiCall("generate-plan", {
           endpoint: "gemini-1.5-flash:generateContent",
           body: {
@@ -250,6 +284,16 @@
                       type: "OBJECT",
                       properties: {
                         day: { type: "STRING" },
+                        summary: { type: "STRING" },
+                        totals: {
+                          type: "OBJECT",
+                          properties: {
+                            calories: { type: "NUMBER" },
+                            protein:  { type: "NUMBER" },
+                            carbs:    { type: "NUMBER" },
+                            fat:      { type: "NUMBER" }
+                          }
+                        },
                         meals: {
                           type: "ARRAY",
                           items: {
@@ -261,18 +305,39 @@
                                 items: {
                                   type: "OBJECT",
                                   properties: {
-                                    title: { type: "STRING" },
-                                    calories: { type: "NUMBER" },
+                                    title:   { type: "STRING" },
+                                    calories:{ type: "NUMBER" },
                                     protein: { type: "NUMBER" },
-                                    carbs: { type: "NUMBER" },
-                                    fat: { type: "NUMBER" }
-                                  }
+                                    carbs:   { type: "NUMBER" },
+                                    fat:     { type: "NUMBER" },
+                                    rationale:{ type: "STRING" },
+                                    tags:    { type: "ARRAY", items: { type: "STRING" } },
+                                    allergens:{ type: "ARRAY", items: { type: "STRING" } },
+                                    substitutions:{ type: "ARRAY", items: { type: "STRING" } },
+                                    prepTime:{ type: "NUMBER" },
+                                    cookTime:{ type: "NUMBER" },
+                                    ingredients: {
+                                      type: "ARRAY",
+                                      items: {
+                                        type: "OBJECT",
+                                        properties: {
+                                          item: { type: "STRING" },
+                                          qty:  { type: "NUMBER" },
+                                          unit: { type: "STRING" },
+                                          category: { type: "STRING" }
+                                        }
+                                      }
+                                    },
+                                    steps: { type: "ARRAY", items: { type: "STRING" } }
+                                  },
+                                  required: ["title","calories","protein","carbs","fat","ingredients","steps"]
                                 }
                               }
                             }
                           }
                         }
-                      }
+                      },
+                      required: ["day","meals"]
                     }
                   }
                 },
@@ -363,22 +428,63 @@
 
     function renderDayHTML(day) {
       const meals = day.meals || [];
-      const blocks = meals.map(m => {
-        const items = (m.items || []).map(it => (
-          `<li class="flex justify-between gap-4">
-            <span class="text-gray-800">${escapeHTML(it.title || "")}</span>
-            <span class="text-gray-500 text-sm">${fmt(it.calories)} kcal · P ${fmt(it.protein)}g · C ${fmt(it.carbs)}g · F ${fmt(it.fat)}g</span>
-          </li>`
-        )).join("");
+      const summary = day.summary ? `<p class="text-sm text-gray-600 mb-4">${escapeHTML(day.summary)}</p>` : "";
+      const totals = day.totals
+        ? `<p class="text-xs text-gray-500 mb-6">Daily totals: ${fmt(day.totals.calories)} kcal · P ${fmt(day.totals.protein)}g · C ${fmt(day.totals.carbs)}g · F ${fmt(day.totals.fat)}g</p>`
+        : "";
 
-        return `<div class="mb-6">
-          <h4 class="font-semibold text-gray-900 mb-2">${escapeHTML(m.name || "Meal")}</h4>
-          <ul class="space-y-2">${items}</ul>
+      const blocks = meals.map(m => {
+        const items = (m.items || []).map(it => {
+          const tags = (it.tags || []).map(t => `<span class="px-2 py-0.5 text-xs rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">${escapeHTML(t)}</span>`).join(" ");
+          const allergens = (it.allergens || []).length ? `<p class="text-xs text-rose-600 mt-2">Allergens: ${it.allergens.map(escapeHTML).join(", ")}</p>` : "";
+          const subs = (it.substitutions || []).length ? `<p class="text-xs text-gray-500 mt-1">Substitutions: ${it.substitutions.map(escapeHTML).join("; ")}</p>` : "";
+
+          const ing = (it.ingredients || []).map(ing =>
+            `<li>${escapeHTML(ing.item)} — ${ing.qty ?? "-"} ${escapeHTML(ing.unit || "")}</li>`
+          ).join("");
+
+          const steps = (it.steps || []).map((s, idx) => `<li><span class="font-semibold mr-2">${idx+1}.</span>${escapeHTML(s)}</li>`).join("");
+
+          return `
+            <li class="space-y-2">
+              <div class="flex justify-between flex-wrap gap-2">
+                <span class="text-gray-800 font-medium">${escapeHTML(it.title || "")}</span>
+                <span class="text-gray-500 text-sm">${fmt(it.calories)} kcal · P ${fmt(it.protein)}g · C ${fmt(it.carbs)}g · F ${fmt(it.fat)}g</span>
+              </div>
+              ${it.rationale ? `<p class="text-sm text-gray-600">${escapeHTML(it.rationale)}</p>` : ""}
+              ${tags ? `<div class="flex flex-wrap gap-2">${tags}</div>` : ""}
+
+              <details class="mt-2">
+                <summary class="cursor-pointer text-sm text-emerald-700">Ingredients & Steps</summary>
+                <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <h5 class="font-semibold text-gray-900 mb-2">Ingredients</h5>
+                    <ul class="list-disc pl-5 space-y-1 text-sm">${ing || "<li>—</li>"}</ul>
+                  </div>
+                  <div>
+                    <h5 class="font-semibold text-gray-900 mb-2">Steps</h5>
+                    <ol class="space-y-1 text-sm">${steps || "<li>—</li>"}</ol>
+                    <p class="text-xs text-gray-500 mt-2">
+                      Prep ${fmt(it.prepTime)} min · Cook ${fmt(it.cookTime)} min
+                    </p>
+                    ${subs}
+                    ${allergens}
+                  </div>
+                </div>
+              </details>
+            </li>`;
+        }).join("");
+
+        return `<div class="mb-8">
+          <h4 class="font-semibold text-gray-900 mb-3">${escapeHTML(m.name || "Meal")}</h4>
+          <ul class="space-y-4">${items}</ul>
         </div>`;
       }).join("");
 
       return `<div>
-        <h3 class="text-2xl font-bold text-gray-900 mb-4">${escapeHTML(day.day || "")}</h3>
+        <h3 class="text-2xl font-bold text-gray-900 mb-2">${escapeHTML(day.day || "")}</h3>
+        ${summary}
+        ${totals}
         ${blocks}
         ${day.notes ? `<p class="text-sm text-gray-500 mt-4">${escapeHTML(day.notes)}</p>` : ""}
       </div>`;
@@ -387,7 +493,36 @@
     const fmt = (x) => (x == null || isNaN(Number(x))) ? "-" : Number(x).toFixed(0);
     const escapeHTML = (s) => String(s).replace(/[&<>\"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", "\"":"&quot;", "'":"&#39;" }[c]));
 
+    // ---------- Grocery list from ingredients (with quantity merge) ----------
     function buildGroceryList(plan) {
+      const byKey = new Map();
+      const add = (item, qty, unit, category) => {
+        const key = `${item.toLowerCase()}|${(unit||'').toLowerCase()}`;
+        const prev = byKey.get(key) || { item, qty: 0, unit: unit || "", category: category || "Other" };
+        prev.qty += (Number(qty) || 0);
+        byKey.set(key, prev);
+      };
+
+      let usedIngredients = false;
+
+      (plan.days || []).forEach(d =>
+        (d.meals || []).forEach(m =>
+          (m.items || []).forEach(it => {
+            if (Array.isArray(it.ingredients) && it.ingredients.length) {
+              usedIngredients = true;
+              it.ingredients.forEach(ing => { if (ing?.item) add(ing.item, ing.qty, ing.unit, ing.category); });
+            }
+          })
+        )
+      );
+
+      if (usedIngredients) {
+        return Array.from(byKey.values())
+          .sort((a, b) => a.item.localeCompare(b.item))
+          .map(x => ({ item: `${x.item}${x.qty ? ` — ${fmt(x.qty)} ${x.unit}` : ""}`, count: 1, category: x.category }));
+      }
+
+      // Fallback: titles
       const f = new Map();
       (plan.days || []).forEach(d =>
         (d.meals || []).forEach(m =>
@@ -413,13 +548,14 @@
       list.forEach(({ item, count }) => {
         const li = document.createElement("li"); li.className = "flex items-center gap-3";
         li.innerHTML = `<input type="checkbox" class="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500">
-          <span class="flex-1 capitalize">${escapeHTML(item)}</span>
-          <span class="text-xs text-gray-500">x${count}</span>`;
+          <span class="flex-1">${escapeHTML(item)}</span>
+          <span class="text-xs text-gray-500">${count > 1 ? `x${count}` : ""}</span>`;
         ul.appendChild(li);
       });
       box.appendChild(ul);
     }
 
+    // ---------- PDF ----------
     async function downloadPDF() {
       const JSPDF = getJsPDF();
       if (!JSPDF) { showMessage("PDF engine not loaded yet."); return; }

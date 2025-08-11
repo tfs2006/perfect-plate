@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Perfect-Plate – AI Meal Planner</title>
 
-  <!-- Tailwind CDN (fine for now; can switch to CLI later) -->
+  <!-- Tailwind CDN (ok for now; can move to CLI later) -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- jsPDF + html2canvas for PDF export -->
+  <!-- PDF + capture -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
@@ -201,7 +201,9 @@
               <img id="meal-plan-image" src="" alt="Meal Plan" class="w-full h-auto object-cover" />
             </div>
             <div class="bg-white p-6 rounded-2xl shadow-lg">
-              <h3 class="text-xl font-bold text-gray-800">Grocery List</h3>
+              <div class="flex items-center justify-between">
+                <h3 class="text-xl font-bold text-gray-800">Grocery List</h3>
+              </div>
               <div id="grocery-list-container" class="mt-4 space-y-4 max-h-96 overflow-y-auto pr-2"></div>
               <button id="grocery-list-button" class="mt-4 w-full bg-emerald-50 text-emerald-800 font-semibold py-3 px-4 rounded-lg hover:bg-emerald-100 border border-emerald-200">Generate Grocery List</button>
             </div>
