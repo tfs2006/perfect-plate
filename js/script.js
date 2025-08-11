@@ -137,7 +137,7 @@
     }
 
     function buildJsonPrompt(i) {
-      return `You are a dietitian. Return STRICT JSON ONLY (no markdown) with 7 days, each with Breakfast/Lunch/Snack/Dinner items including calories, protein, carbs, fat. Respect: medical conditions: ${i.medicalConditions || "None"}, exclusions: ${i.exclusions || "None"}, cultural background: ${i.ethnicity}, goal: ${i.fitnessGoal}, diet prefs: ${(i.dietaryPrefs || []).join(", ") || "None"}, age ${i.age}, gender ${i.gender}. Keep titles short with common US groceries.`;
+      return `Return STRICT JSON ONLY (no markdown) matching EXACTLY this shape:\n\n{\n  "planTitle": "string",\n  "days": [\n    {\n      "day": "Monday",\n      "meals": [\n        {"name":"Breakfast","items":[{"title":"Greek yogurt with berries","calories":350,"protein":25,"carbs":40,"fat":10}]},\n        {"name":"Lunch","items":[{"title":"Chicken salad bowl","calories":520,"protein":45,"carbs":32,"fat":22}]},\n        {"name":"Snack","items":[{"title":"Apple + peanut butter","calories":250,"protein":8,"carbs":28,"fat":12}]},\n        {"name":"Dinner","items":[{"title":"Salmon, quinoa, broccoli","calories":650,"protein":45,"carbs":50,"fat":24}]}\n      ]\n    }\n  ],\n  "notes": "string"\n}\n\nRules:\n- Exactly 7 days: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday.\n- Every meal MUST have 1–2 items. No empty arrays. No nulls.\n- Use integers for calories, protein, carbs, fat (round if needed).\n- Respect medical conditions: ${i.medicalConditions || 'None'}; exclusions: ${i.exclusions || 'None'}.\n- Cultural background: ${i.ethnicity}; goal: ${i.fitnessGoal}; diet prefs: ${(i.dietaryPrefs || []).join(', ') || 'None'}; age ${i.age}, gender ${i.gender}.\n- Use common US grocery foods; keep titles under 60 chars.`;
     }
 
     // Robust JSON extractor (handles code fences and stray prose)
@@ -182,6 +182,35 @@
       // If it returned an array directly, treat it as days
       if (Array.isArray(obj)) return { planTitle: '7‑Day Plan', days: obj, notes: '' };
       return null;
+    }
+
+    function needsRepair(plan){
+      let bad = false;
+      (plan.days || []).forEach(d =>
+        (d.meals || []).forEach(m => {
+          if (!Array.isArray(m.items) || m.items.length === 0) bad = true;
+        })
+      );
+      return bad;
+    }
+
+    async function repairPlan(plan, inputs){
+      const repairPrompt =
+        `Fix this JSON so EVERY meal has at least 1 item with {title, calories, protein, carbs, fat} (integers). ` +
+        `Keep the same days and meal names. Respect medical conditions/exclusions/culture/goal from context. ` +
+        `Return JSON ONLY in the same schema.\n\nContext: ${JSON.stringify(inputs)}\n\nCurrent JSON:\n${JSON.stringify(plan)}`;
+
+      const fixRes = await secureApiCall('generate-plan', {
+        endpoint: 'gemini-1.5-flash:generateContent',
+        body: {
+          contents: [{ parts: [{ text: repairPrompt }] }],
+          generationConfig: { response_mime_type: 'application/json' }
+        }
+      });
+      const raw = fixRes?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      let fixed = extractFirstJSON(raw);
+      fixed = coercePlan(fixed);
+      return fixed || plan;
     }
 
     // ---------- Submit ----------
@@ -254,11 +283,14 @@
         });
 
         const rawText = textResult?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        let plan = extractFirstJSON(rawText);
-        plan = coercePlan(plan);
+        let plan = coercePlan(extractFirstJSON(rawText));
         if (!plan || !Array.isArray(plan.days)) {
           console.warn("Model raw response (first 400 chars):", String(rawText).slice(0, 400));
           throw new Error("Plan format invalid.");
+        }
+
+        if (needsRepair(plan)) {
+          plan = await repairPlan(plan, { age, gender, ethnicity, medicalConditions, fitnessGoal, exclusions, dietaryPrefs });
         }
 
         renderResults(plan);
