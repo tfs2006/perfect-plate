@@ -30,6 +30,7 @@
     const messageBox      = $("message-box");
     const messageText     = $("message-text");
     const mealPlanImage   = $("meal-plan-image");
+    const loaderText      = $("loader-text");
 
     if (!form || !formContainer || !resultContainer) {
       console.error("Core DOM nodes missing");
@@ -314,105 +315,107 @@
       showLoader();
 
       try {
-        // Split generation to avoid Netlify 504 (Mon–Wed) + (Thu–Sun)
-        const DAY_BLOCKS = [
-          ["Monday","Tuesday","Wednesday"],
-          ["Thursday","Friday","Saturday","Sunday"]
-        ];
+        // Generate each day individually to avoid long JSON truncation and make parsing more reliable
+        const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
 
-        async function generateDays(daysArr) {
-          async function tryOnce(maxTokens, temperature) {
-            const prompt = buildJsonPromptRange(lastInputs, daysArr);
-            const resp = await secureApiCall("generate-plan", {
-              endpoint: "gemini-1.5-flash:generateContent",
-              body: {
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: {
-                  maxOutputTokens: maxTokens,
-                  temperature,
-                  response_mime_type: "application/json",
-                  response_schema: {
-                    type: "OBJECT",
-                    properties: {
-                      planTitle: { type: "STRING" },
-                      notes: { type: "STRING" },
-                      days: {
-                        type: "ARRAY",
-                        items: {
+        async function generateDay(dayName) {
+          async function tryOnce(maxTokens, temperature, useSchema = true) {
+            const prompt = buildJsonPromptRange(lastInputs, [dayName]);
+            const body = {
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: {
+                maxOutputTokens: maxTokens,
+                temperature,
+                response_mime_type: "application/json",
+              }
+            };
+            if (useSchema) {
+              body.generationConfig.response_schema = {
+                type: "OBJECT",
+                properties: {
+                  planTitle: { type: "STRING" },
+                  notes: { type: "STRING" },
+                  days: {
+                    type: "ARRAY",
+                    items: {
+                      type: "OBJECT",
+                      properties: {
+                        day: { type: "STRING" },
+                        summary: { type: "STRING" },
+                        totals: {
                           type: "OBJECT",
                           properties: {
-                            day: { type: "STRING" },
-                            summary: { type: "STRING" },
-                            totals: {
-                              type: "OBJECT",
-                              properties: {
-                                calories: { type: "NUMBER" },
-                                protein:  { type: "NUMBER" },
-                                carbs:    { type: "NUMBER" },
-                                fat:      { type: "NUMBER" }
-                              }
-                            },
-                            meals: {
-                              type: "ARRAY",
+                            calories: { type: "NUMBER" },
+                            protein:  { type: "NUMBER" },
+                            carbs:    { type: "NUMBER" },
+                            fat:      { type: "NUMBER" }
+                          }
+                        },
+                        meals: {
+                          type: "ARRAY",
+                          items: {
+                            type: "OBJECT",
+                            properties: {
+                              name: { type: "STRING" },
                               items: {
-                                type: "OBJECT",
-                                properties: {
-                                  name: { type: "STRING" },
-                                  items: {
-                                    type: "ARRAY",
-                                    items: {
-                                      type: "OBJECT",
-                                      properties: {
-                                        title:   { type: "STRING" },
-                                        calories:{ type: "NUMBER" },
-                                        protein: { type: "NUMBER" },
-                                        carbs:   { type: "NUMBER" },
-                                        fat:     { type: "NUMBER" },
-                                        rationale:{ type: "STRING" },
-                                        tags:    { type: "ARRAY", items: { type: "STRING" } },
-                                        allergens:{ type: "ARRAY", items: { type: "STRING" } },
-                                        substitutions:{ type: "ARRAY", items: { type: "STRING" } },
-                                        prepTime:{ type: "NUMBER" },
-                                        cookTime:{ type: "NUMBER" },
-                                        ingredients: {
-                                          type: "ARRAY",
-                                          items: {
-                                            type: "OBJECT",
-                                            properties: {
-                                              item: { type: "STRING" },
-                                              qty:  { type: "NUMBER" },
-                                              unit: { type: "STRING" },
-                                              category: { type: "STRING" }
-                                            }
-                                          }
-                                        },
-                                        steps: { type: "ARRAY", items: { type: "STRING" } }
-                                      },
-                                      required: ["title","calories","protein","carbs","fat","ingredients","steps"]
-                                    }
-                                  }
+                                type: "ARRAY",
+                                items: {
+                                  type: "OBJECT",
+                                  properties: {
+                                    title:   { type: "STRING" },
+                                    calories:{ type: "NUMBER" },
+                                    protein: { type: "NUMBER" },
+                                    carbs:   { type: "NUMBER" },
+                                    fat:     { type: "NUMBER" },
+                                    rationale:{ type: "STRING" },
+                                    tags:    { type: "ARRAY", items: { type: "STRING" } },
+                                    allergens:{ type: "ARRAY", items: { type: "STRING" } },
+                                    substitutions:{ type: "ARRAY", items: { type: "STRING" } },
+                                    prepTime:{ type: "NUMBER" },
+                                    cookTime:{ type: "NUMBER" },
+                                    ingredients: {
+                                      type: "ARRAY",
+                                      items: {
+                                        type: "OBJECT",
+                                        properties: {
+                                          item: { type: "STRING" },
+                                          qty:  { type: "NUMBER" },
+                                          unit: { type: "STRING" },
+                                          category: { type: "STRING" }
+                                        }
+                                      }
+                                    },
+                                    steps: { type: "ARRAY", items: { type: "STRING" } }
+                                  },
+                                  required: ["title","calories","protein","carbs","fat","ingredients","steps"]
                                 }
                               }
                             }
-                          },
-                          required: ["day","meals"]
+                          }
                         }
-                      }
-                    },
-                    required: ["days"]
+                      },
+                      required: ["day","meals"]
+                    }
                   }
-                }
-              }
+                },
+                required: ["days"]
+              };
+            }
+
+            const resp = await secureApiCall("generate-plan", {
+              endpoint: "gemini-1.5-flash:generateContent",
+              body
             });
 
             const text = getFirstPartText(resp);
+            window.__lastPlanText = text || ""; // for debugging in console
             if (!text) {
-              console.warn("Model returned no text. Full response:", resp);
+              console.warn("Model returned no text for", dayName, "Full response:", resp);
               return null;
             }
             let partPlan = coercePlan(extractFirstJSON(text));
             if (!partPlan || !Array.isArray(partPlan.days)) {
-              console.warn("Failed to parse JSON. Raw text (first 400 chars):", String(text).slice(0,400));
+              console.warn("Failed to parse JSON for", dayName, "Raw text (first 400 chars):", String(text).slice(0,400));
               return null;
             }
             if (needsRepair(partPlan)) {
@@ -421,23 +424,38 @@
             return partPlan;
           }
 
-          // First try (larger token budget), then a tighter retry
-          let planPart = await tryOnce(1400, 0.7);
-          if (!planPart) {
-            planPart = await tryOnce(1100, 0.4);
-          }
-          if (!planPart) {
-            throw new Error("Plan format invalid.");
-          }
+          // Try with schema + higher token budget, then retry with smaller budget, then without schema
+          let planPart = await tryOnce(2200, 0.7, true);
+          if (!planPart) planPart = await tryOnce(1600, 0.4, true);
+          if (!planPart) planPart = await tryOnce(1400, 0.3, false);
           return planPart;
         }
 
-        // Run both parts in parallel and merge
-        const [p1, p2] = await Promise.all(DAY_BLOCKS.map(generateDays));
+        // Generate days sequentially to ensure stability and clearer error boundaries
+        const daysOut = [];
+        for (let i = 0; i < DAYS.length; i++) {
+          const day = DAYS[i];
+          if (loaderText) loaderText.textContent = `Creating your plan… ${i+1}/7 (${day})`;
+          try {
+            const part = await generateDay(day);
+            if (part?.days?.[0]) {
+              daysOut.push(part.days[0]);
+            } else {
+              console.warn("No valid plan for", day);
+            }
+          } catch (e) {
+            console.warn("Error generating", day, e);
+          }
+        }
+
+        if (!daysOut.length) {
+          throw new Error("Plan format invalid.");
+        }
+
         let plan = {
-          planTitle: p1.planTitle || "Your 7-Day Plan",
-          notes: [p1.notes, p2.notes].filter(Boolean).join(" "),
-          days: [...(p1.days || []), ...(p2.days || [])]
+          planTitle: "Your 7-Day Plan",
+          notes: "",
+          days: daysOut
         };
 
         ensureDayTotals(plan);
