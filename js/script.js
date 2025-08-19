@@ -681,23 +681,45 @@
         ensureDayTotals(plan);
         renderResults(plan, lastInputs);
 
-        // Plan image: use Unsplash featured image related to cuisine/goal (no API key required)
+        // Plan image: generate via Gemini Images endpoint
         try {
-          const cuisine = encodeURIComponent(ethnicity || "healthy");
-          const theme = encodeURIComponent(fitnessGoal || "wellness");
-          const url = `https://source.unsplash.com/featured/1200x800?food,healthy,${cuisine},${theme}`;
-          if (mealPlanImage) {
-            mealPlanImage.onload = () => { 
-              const wrap = document.getElementById('image-container'); 
-              if (wrap) wrap.style.display = 'block'; 
+          const imgPrompt = `Editorial food photography, natural light, 1200x800, appetizing meal spread inspired by ${ethnicity ||
+            "healthy"} cuisine and ${fitnessGoal || "wellness"} goals.`;
+
+          const imageResult = await secureApiCall("generate-plan", {
+            endpoint: "imagegeneration:generate",
+            body: {
+              contents: [{ parts: [{ text: imgPrompt }] }],
+              generationConfig: {
+                size: "1200x800",
+                mimeType: "image/png",
+                n: 1
+              }
+            }
+          });
+
+          let b64 =
+            imageResult?.generatedImages?.[0]?.bytesBase64Encoded ||
+            imageResult?.generatedImages?.[0]?.image?.bytesBase64Encoded ||
+            (imageResult?.candidates?.[0]?.content?.parts || []).find(
+              p => p.inlineData && p.inlineData.data
+            )?.inlineData?.data ||
+            null;
+
+          if (b64 && mealPlanImage) {
+            mealPlanImage.onload = () => {
+              const wrap = document.getElementById("image-container");
+              if (wrap) wrap.style.display = "block";
             };
-            mealPlanImage.onerror = () => { 
-              const wrap = document.getElementById('image-container'); 
-              if (wrap) wrap.style.display = 'block'; 
+            mealPlanImage.onerror = () => {
+              const wrap = document.getElementById("image-container");
+              if (wrap) wrap.style.display = "block";
             };
-            mealPlanImage.src = url;
+            mealPlanImage.src = `data:image/png;base64,${b64}`;
           }
-        } catch (imgErr) { console.warn("Image load failed:", imgErr); }
+        } catch (imgErr) {
+          console.warn("Image generation failed:", imgErr);
+        }
 
         hideLoader();
         resultContainer.style.display = "block";
