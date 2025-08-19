@@ -500,58 +500,6 @@
       return day;
     }
 
-    // Enforce exactly Breakfast/Lunch/Dinner (one item each) per day
-    function normalizeDayMeals(day){
-      if (!day || !Array.isArray(day.meals)) { day.meals = []; }
-      const want = ["breakfast","lunch","dinner"];
-      const byName = new Map();
-      (day.meals || []).forEach(m => {
-        const key = String(m?.name || "").toLowerCase().trim();
-        if (!byName.has(key)) byName.set(key, m);
-      });
-
-      const pickOneItem = (m) => {
-        if (!m) return null;
-        if (!Array.isArray(m.items) || m.items.length === 0) return null;
-        // Don't modify if already has exactly one item
-        if (m.items.length === 1) return m;
-        m.items = [m.items[0]]; // exactly one item per meal
-        return m;
-      };
-
-      const result = [];
-      // Use existing meals if present
-      want.forEach(w => {
-        const cap = w.charAt(0).toUpperCase() + w.slice(1);
-        const src = byName.get(w);
-        if (src) {
-          const picked = pickOneItem({ ...src, name: src.name || cap });
-          // if pickOneItem returned null (no valid items) push an empty shell
-          result.push(picked || { name: cap, items: [] });
-        } else {
-          // no meal at all -> push empty shell to keep structure
-          result.push({ name: cap, items: [] });
-        }
-      });
-      // If any missing, try to repurpose other meals (e.g., snacks) or duplicate breakfast item
-      const others = (day.meals || []).filter(m => !want.includes(String(m?.name || "").toLowerCase()));
-      while (result.length < 3) {
-        const needed = want[result.length];
-        let source = result[0] || others.shift();
-        if (!source) break;
-        const clone = JSON.parse(JSON.stringify(source));
-        clone.name = needed.charAt(0).toUpperCase()+needed.slice(1);
-        pickOneItem(clone);
-        result.push(clone);
-      }
-      // Final fallback: create empty shells so UI remains consistent
-      while (result.length < 3) {
-        result.push({ name: (want[result.length].charAt(0).toUpperCase()+want[result.length].slice(1)), items: [] });
-      }
-      // Filter out any accidental nulls and assign back
-      day.meals = result.filter(Boolean);
-    }
-
     // Function to capitalize meal name
     function capitalName(n){
       const s = String(n||'');
@@ -687,6 +635,58 @@ User profile: ${JSON.stringify(inputs)}`;
       }
       
       return plan;
+    }
+
+    // Enforce exactly Breakfast/Lunch/Dinner (one item each) per day
+    function normalizeDayMeals(day){
+      if (!day || !Array.isArray(day.meals)) { day.meals = []; }
+      const want = ["breakfast","lunch","dinner"];
+      const byName = new Map();
+      (day.meals || []).forEach(m => {
+        const key = String(m?.name || "").toLowerCase().trim();
+        if (!byName.has(key)) byName.set(key, m);
+      });
+
+      const pickOneItem = (m) => {
+        if (!m) return null;
+        if (!Array.isArray(m.items) || m.items.length === 0) return null;
+        // Don't modify if already has exactly one item
+        if (m.items.length === 1) return m;
+        m.items = [m.items[0]]; // exactly one item per meal
+        return m;
+      };
+
+      const result = [];
+      // Use existing meals if present
+      want.forEach(w => {
+        const cap = w.charAt(0).toUpperCase() + w.slice(1);
+        const src = byName.get(w);
+        if (src) {
+          const picked = pickOneItem({ ...src, name: src.name || cap });
+          // if pickOneItem returned null (no valid items) push an empty shell
+          result.push(picked || { name: cap, items: [] });
+        } else {
+          // no meal at all -> push empty shell to keep structure
+          result.push({ name: cap, items: [] });
+        }
+      });
+      // If any missing, try to repurpose other meals (e.g., snacks) or duplicate breakfast item
+      const others = (day.meals || []).filter(m => !want.includes(String(m?.name || "").toLowerCase()));
+      while (result.length < 3) {
+        const needed = want[result.length];
+        let source = result[0] || others.shift();
+        if (!source) break;
+        const clone = JSON.parse(JSON.stringify(source));
+        clone.name = needed.charAt(0).toUpperCase()+needed.slice(1);
+        pickOneItem(clone);
+        result.push(clone);
+      }
+      // Final fallback: create empty shells so UI remains consistent
+      while (result.length < 3) {
+        result.push({ name: (want[result.length].charAt(0).toUpperCase()+want[result.length].slice(1)), items: [] });
+      }
+      // Filter out any accidental nulls and assign back
+      day.meals = result.filter(Boolean);
     }
 
     // ---------- Why-this-plan card ----------
@@ -870,13 +870,24 @@ User profile: ${JSON.stringify(inputs)}`;
             const part = await generateDay(day);
             if (part?.days?.[0]) {
               // Select unique items and track their titles and tokens
-              const processedDay = pickUniqueItemsForDay(part.days[0], usedTitles, usedTokens, allPreviousItems);
+              let processedDay = pickUniqueItemsForDay(part.days[0], usedTitles, usedTokens, allPreviousItems);
               
-              // If any meals need regeneration due to duplicates, generate them now
-              if (processedDay.needsRegeneration && processedDay.needsRegeneration.length > 0) {
+              // Check for both empty meals and meals that need regeneration
+              const emptyMeals = (processedDay.meals||[])
+                .filter(m => !m.items || m.items.length === 0)
+                .map(m => m.name)
+                .filter(Boolean);
+              
+              const needsRegenMeals = processedDay.needsRegeneration || [];
+              
+              // Combine both lists (avoiding duplicates)
+              const missingNames = [...new Set([...emptyMeals, ...needsRegenMeals])];
+              
+              // If any meals need regeneration or are empty, generate them now
+              if (missingNames.length > 0) {
                 const fills = await fillMissingMealsForDay(
                   day, 
-                  processedDay.needsRegeneration, 
+                  missingNames, 
                   usedTitles, 
                   usedTokens, 
                   lastInputs,
@@ -959,8 +970,11 @@ User profile: ${JSON.stringify(inputs)}`;
             imageResult?.generatedImages?.[0]?.bytesBase64Encoded ||
             imageResult?.generatedImages?.[0]?.image?.bytesBase64Encoded ||
             (imageResult?.candidates?.[0]?.content?.parts || []).find(
-              p => p.inlineData && p.inlineData.data
+              p => (p.inlineData && p.inlineData.data) || (p.inline_data && p.inline_data.data)
             )?.inlineData?.data ||
+            (imageResult?.candidates?.[0]?.content?.parts || []).find(
+              p => p.inline_data && p.inline_data.data
+            )?.inline_data?.data ||
             null;
 
           if (b64 && mealPlanImage) {
@@ -1155,7 +1169,7 @@ User profile: ${JSON.stringify(inputs)}`;
 
     // Regenerate a single meal
     async function regenerateMeal(dayIdx, mealName) {
-      if (!currentPlan || !Array.isArray(currentPlan.days) || dayIdx < 0 || !mealName) {
+      if (!currentPlan || !Array.isArray(currentPlan.days) || dayIdx == null || Number.isNaN(Number(dayIdx)) || Number(dayIdx) < 0 || !mealName) {
         showMessage("Cannot regenerate meal: invalid parameters");
         return false;
       }
