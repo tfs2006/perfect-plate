@@ -17,6 +17,15 @@
     return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
   }
 
+  // Extract meaningful tokens from title (for diversity tracking)
+  function extractTokens(title){
+    const stop = new Set(["and","with","of","the","a","an","in","on","to","for","served","style","bowl","salad","soup","wrap","toast","sandwich","roasted","grilled","baked","pan","stir","fried","fresh","mixed","classic","quick","easy","healthy"]);
+    return String(title||"").toLowerCase()
+      .replace(/[^a-z0-9 ]+/g, " ")
+      .split(/\s+/)
+      .filter(t => t && !stop.has(t));
+  }
+
   // Pretty quantity for grocery labels (e.g., 1.5 -> "1 1/2")
   function formatQty(n){
     if (n == null || isNaN(Number(n))) return "";
@@ -177,7 +186,7 @@
     }
 
     // ---------- Prompt (detailed) ----------
-    function buildJsonPromptRange(i, daysArray, avoidTitles = []) {
+    function buildJsonPromptRange(i, daysArray, avoidTitles = [], avoidTokens = []) {
       const profile = {
         age: i.age, gender: i.gender, ethnicity: i.ethnicity,
         goal: i.fitnessGoal, dietPrefs: i.dietaryPrefs, exclusions: i.exclusions,
@@ -186,6 +195,7 @@
 
       const daysList = daysArray.join(", ");
       const avoidList = avoidTitles.length ? avoidTitles.join(", ") : "none yet";
+      const avoidTokList = avoidTokens.length ? avoidTokens.join(", ") : "none yet";
 
       return `Return STRICT JSON ONLY (no markdown) with this schema:
 
@@ -223,6 +233,7 @@
   }
 
   Do NOT repeat any recipe titles across the week. Avoid exactly these titles: ${avoidList}.
+  Avoid these core keywords/themes across the week: ${avoidTokList}. Rotate proteins and grains; do not reuse the same main ingredient more than once.
 
   Rules:
   - Output ONLY these days (inclusive, in order): ${daysList}.
@@ -325,7 +336,7 @@
     }
 
     // Pick unique items for each meal in a day
-    function pickUniqueItemsForDay(day, usedTitles) {
+    function pickUniqueItemsForDay(day, usedTitles, usedTokens) {
       if (!day || !Array.isArray(day.meals)) { day.meals = []; }
       
       // Ensure we have the three standard meals
@@ -353,17 +364,39 @@
         }
         
         // Try to find an item whose title hasn't been used globally or within this day
+        // AND whose tokens haven't been used
         let selectedItem = null;
         for (const item of meal.items) {
           const title = item.title || "";
           const normalizedTitle = normalizeTitle(title);
           if (!normalizedTitle) continue;
           
-          if (!usedTitles.has(normalizedTitle) && !dayUsedTitles.has(normalizedTitle)) {
+          const tokens = extractTokens(title);
+          const hasUsedToken = tokens.some(token => usedTokens.has(token));
+          
+          if (!usedTitles.has(normalizedTitle) && !dayUsedTitles.has(normalizedTitle) && !hasUsedToken) {
             selectedItem = item;
             usedTitles.add(normalizedTitle);
             dayUsedTitles.add(normalizedTitle);
+            tokens.forEach(token => usedTokens.add(token));
             break;
+          }
+        }
+        
+        // If all items have used tokens, try to find one with just a unique title
+        if (!selectedItem) {
+          for (const item of meal.items) {
+            const title = item.title || "";
+            const normalizedTitle = normalizeTitle(title);
+            if (!normalizedTitle) continue;
+            
+            if (!usedTitles.has(normalizedTitle) && !dayUsedTitles.has(normalizedTitle)) {
+              selectedItem = item;
+              usedTitles.add(normalizedTitle);
+              dayUsedTitles.add(normalizedTitle);
+              extractTokens(title).forEach(token => usedTokens.add(token));
+              break;
+            }
           }
         }
         
@@ -374,6 +407,7 @@
           if (normalizedTitle) {
             usedTitles.add(normalizedTitle);
             dayUsedTitles.add(normalizedTitle);
+            extractTokens(selectedItem.title || "").forEach(token => usedTokens.add(token));
           }
         }
         
@@ -476,15 +510,22 @@
 
       formContainer.style.display = "none";
       showLoader();
+      
+      // Hide image container until image loads
+      const imgWrap = document.getElementById('image-container'); 
+      if (imgWrap) imgWrap.style.display = 'none';
 
       try {
         // Generate each day individually to avoid long JSON truncation and make parsing more reliable
         const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
         const usedTitles = new Set(); // Track used titles across all days
+        const usedTokens = new Set(); // Track used tokens across all days
 
         async function generateDay(dayName) {
           async function tryOnce(maxTokens, temperature, useSchema = true) {
-            const prompt = buildJsonPromptRange(lastInputs, [dayName], Array.from(usedTitles).slice(0, 100));
+            const prompt = buildJsonPromptRange(lastInputs, [dayName], 
+              Array.from(usedTitles).slice(0, 100), 
+              Array.from(usedTokens).slice(0, 150));
             const body = {
               contents: [{ parts: [{ text: prompt }] }],
               generationConfig: {
@@ -603,8 +644,8 @@
           try {
             const part = await generateDay(day);
             if (part?.days?.[0]) {
-              // Select unique items and track their titles
-              const processedDay = pickUniqueItemsForDay(part.days[0], usedTitles);
+              // Select unique items and track their titles and tokens
+              const processedDay = pickUniqueItemsForDay(part.days[0], usedTitles, usedTokens);
               daysOut.push(processedDay);
             } else {
               console.warn("No valid plan for", day);
@@ -636,7 +677,17 @@
           const cuisine = encodeURIComponent(ethnicity || "healthy");
           const theme = encodeURIComponent(fitnessGoal || "wellness");
           const url = `https://source.unsplash.com/featured/1200x800?food,healthy,${cuisine},${theme}`;
-          if (mealPlanImage) mealPlanImage.src = url;
+          if (mealPlanImage) {
+            mealPlanImage.onload = () => { 
+              const wrap = document.getElementById('image-container'); 
+              if (wrap) wrap.style.display = 'block'; 
+            };
+            mealPlanImage.onerror = () => { 
+              const wrap = document.getElementById('image-container'); 
+              if (wrap) wrap.style.display = 'block'; 
+            };
+            mealPlanImage.src = url;
+          }
         } catch (imgErr) { console.warn("Image load failed:", imgErr); }
 
         hideLoader();
@@ -674,7 +725,7 @@
         const panel = document.createElement("div");
         panel.id = id;
         panel.className = "tab-panel hidden";
-        panel.innerHTML = renderDayHTML(d);
+        panel.innerHTML = renderDayHTML(d, idx);
         content?.appendChild(panel);
       });
 
@@ -713,6 +764,10 @@
         formContainer.style.display = "block";
         goToStep(1);
       });
+      
+      // Bind regenerate buttons
+      document.querySelectorAll('.regen-btn').forEach(btn => 
+        btn.addEventListener('click', onRegenClick));
     }
 
     function activateTab(id) {
@@ -724,7 +779,7 @@
       if (panel) panel.classList.remove("hidden");
     }
 
-    function renderDayHTML(day) {
+    function renderDayHTML(day, dayIndex) {
       const meals = day.meals || [];
       const summary = day.summary ? `<p class="text-sm text-gray-600 mb-4">${escapeHTML(day.summary)}</p>` : "";
       const totals = day.totals
@@ -781,7 +836,10 @@
         }).join("");
 
         return `<div class="mb-8">
-          <h4 class="font-semibold text-gray-900 mb-3">${escapeHTML(m.name || "Meal")}</h4>
+          <div class="flex items-center justify-between">
+            <h4 class="font-semibold text-gray-900 mb-3">${escapeHTML(m.name || "Meal")}</h4>
+            <button type="button" class="regen-btn text-xs text-emerald-700 hover:text-emerald-900 underline" data-day-index="${dayIndex}" data-meal-name="${escapeHTML(m.name || "Meal")}">Regenerate</button>
+          </div>
           <ul class="space-y-4">${items}</ul>
         </div>`;
       }).join("");
@@ -793,6 +851,135 @@
         ${blocks}
         ${day.notes ? `<p class="text-sm text-gray-500 mt-4">${escapeHTML(day.notes)}</p>` : ""}
       </div>`;
+    }
+
+    // Compute used titles and tokens from current plan
+    function computeUsedSets(plan){ 
+      const titles = new Set();
+      const tokens = new Set(); 
+      (plan.days||[]).forEach(d => (d.meals||[]).forEach(m => (m.items||[]).forEach(it => { 
+        const nt = normalizeTitle(it.title||''); 
+        if(nt) titles.add(nt); 
+        extractTokens(it.title).forEach(t => tokens.add(t)); 
+      }))); 
+      return {titles, tokens}; 
+    }
+
+    // Regenerate a single meal
+    async function regenerateMeal(dayIdx, mealName) {
+      if (!currentPlan || !Array.isArray(currentPlan.days) || !dayIdx >= 0 || !mealName) {
+        showMessage("Cannot regenerate meal: invalid parameters");
+        return false;
+      }
+
+      const day = currentPlan.days[dayIdx];
+      if (!day || !Array.isArray(day.meals)) {
+        showMessage("Cannot regenerate meal: day not found");
+        return false;
+      }
+
+      // Find the meal to regenerate
+      const mealIdx = day.meals.findIndex(m => 
+        String(m?.name || "").toLowerCase() === String(mealName).toLowerCase());
+      if (mealIdx === -1) {
+        showMessage("Cannot regenerate meal: meal not found");
+        return false;
+      }
+
+      // Compute current used titles and tokens
+      const {titles: usedTitles, tokens: usedTokens} = computeUsedSets(currentPlan);
+
+      try {
+        // Show a small loader
+        showMessage("Regenerating meal...", 10000);
+
+        // Build a prompt for just this meal
+        const prompt = `Generate a single unique recipe for ${mealName} on ${day.day || `Day ${dayIdx+1}`}.
+        
+This must be different from all existing recipes in the plan. Avoid these titles: ${Array.from(usedTitles).join(", ")}.
+Avoid these core ingredients/themes: ${Array.from(usedTokens).join(", ")}.
+
+Return STRICT JSON ONLY with this schema:
+{
+  "title": "Recipe Name",
+  "calories": 350, "protein": 20, "carbs": 55, "fat": 9,
+  "rationale": "Why this fits the user's profile.",
+  "tags": ["High-fiber"],
+  "allergens": [],
+  "substitutions": [],
+  "prepTime": 5, "cookTime": 5,
+  "ingredients": [
+    {"item":"Ingredient 1","qty":0.75,"unit":"cup","category":"Grains"},
+    {"item":"Ingredient 2","qty":0.5,"unit":"cup","category":"Produce"}
+  ],
+  "steps": ["Step 1", "Step 2"]
+}
+
+User profile: ${JSON.stringify(lastInputs)}
+Meal to replace: ${mealName} on ${day.day || `Day ${dayIdx+1}`}`;
+
+        // Call the API
+        const resp = await secureApiCall("generate-plan", {
+          endpoint: "gemini-1.5-flash:generateContent",
+          body: {
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              maxOutputTokens: 1500,
+              temperature: 0.7,
+              response_mime_type: "application/json"
+            }
+          }
+        });
+
+        const text = getFirstPartText(resp);
+        if (!text) {
+          showMessage("Failed to generate a new recipe");
+          return false;
+        }
+
+        // Parse the JSON response
+        const newItem = extractFirstJSON(text);
+        if (!newItem || !newItem.title) {
+          showMessage("Invalid recipe format returned");
+          return false;
+        }
+
+        // Update the meal in the current plan
+        currentPlan.days[dayIdx].meals[mealIdx].items = [newItem];
+        
+        // Re-render the day panel
+        const tabPanel = $(`tab-${dayIdx}`);
+        if (tabPanel) {
+          tabPanel.innerHTML = renderDayHTML(currentPlan.days[dayIdx], dayIdx);
+          // Rebind regenerate buttons
+          tabPanel.querySelectorAll('.regen-btn').forEach(btn => 
+            btn.addEventListener('click', onRegenClick));
+        }
+
+        showMessage(`${mealName} regenerated successfully!`);
+        return true;
+      } catch (err) {
+        console.error("Regeneration error:", err);
+        showMessage("Failed to regenerate meal: " + (err.message || "unknown error"));
+        return false;
+      }
+    }
+
+    // Handle regenerate button click
+    function onRegenClick(e) {
+      const btn = e.currentTarget;
+      const dayIndex = parseInt(btn.dataset.dayIndex, 10);
+      const mealName = btn.dataset.mealName;
+      
+      // Disable button during regeneration
+      btn.disabled = true;
+      btn.textContent = "Regenerating...";
+      
+      regenerateMeal(dayIndex, mealName).finally(() => {
+        // Re-enable button after regeneration (success or failure)
+        btn.disabled = false;
+        btn.textContent = "Regenerate";
+      });
     }
 
     // Normalize ingredient entries that may be strings or objects
