@@ -521,6 +521,103 @@ async function fillMissingMealsForDay(dayName, missingNames, usedTitles, usedTok
       card.classList.remove("hidden");
     }
 
+    // ---------- Image Generation ----------
+    // Extracted as a separate function for better maintainability
+    async function generateMealPlanImage(ethnicity, fitnessGoal) {
+      // Get image container and image element
+      const imgWrap = document.getElementById('image-container');
+      const mealPlanImage = document.getElementById('meal-plan-image');
+      
+      if (!imgWrap || !mealPlanImage) {
+        console.warn('Image container or image element not found');
+        return false;
+      }
+      
+      // Hide image container until image loads
+      imgWrap.style.display = 'none';
+      
+      try {
+        // Create a descriptive prompt based on user inputs
+        const imgPrompt = `Editorial food photography, natural light, 1200x800, appetizing meal spread inspired by ${ethnicity || "healthy"} cuisine and ${fitnessGoal || "wellness"} goals.`;
+        
+        // Show a message that we're generating the image
+        showMessage("Generating a meal plan image...", 3000);
+        
+        // Call the image generation API
+        const imageResult = await secureApiCall("generate-plan", {
+          endpoint: "imagegeneration:generate",
+          body: {
+            contents: [{ parts: [{ text: imgPrompt }] }],
+            generationConfig: {
+              size: "1200x800",
+              mimeType: "image/png",
+              n: 1
+            }
+          }
+        });
+        
+        // Log the response structure for debugging
+        console.log("Image generation response structure:", 
+          Object.keys(imageResult || {}).join(', '));
+        
+        // Extract the base64 image data using multiple possible response formats
+        // Google Imagen API typically returns data in generatedImages[].bytesBase64Encoded
+        let b64 = null;
+        
+        // Primary format for Imagen API
+        if (imageResult?.generatedImages?.[0]?.bytesBase64Encoded) {
+          b64 = imageResult.generatedImages[0].bytesBase64Encoded;
+        } 
+        // Alternative format sometimes used
+        else if (imageResult?.generatedImages?.[0]?.image?.bytesBase64Encoded) {
+          b64 = imageResult.generatedImages[0].image.bytesBase64Encoded;
+        }
+        // Gemini format with inlineData
+        else {
+          const parts = imageResult?.candidates?.[0]?.content?.parts || [];
+          for (const part of parts) {
+            if (part.inlineData?.data) {
+              b64 = part.inlineData.data;
+              break;
+            }
+            if (part.inline_data?.data) {
+              b64 = part.inline_data.data;
+              break;
+            }
+          }
+        }
+        
+        // If we found a base64 image, display it
+        if (b64) {
+          // Set up event handlers for image loading
+          mealPlanImage.onload = () => {
+            imgWrap.style.display = "block";
+            showMessage("Image generated successfully!", 2000);
+          };
+          
+          mealPlanImage.onerror = (e) => {
+            console.error("Image failed to load:", e);
+            imgWrap.style.display = "none";
+            showMessage("Couldn't load the meal plan image. Your plan is still ready!", 4000);
+          };
+          
+          // Set the image source
+          mealPlanImage.src = `data:image/png;base64,${b64}`;
+          return true;
+        } else {
+          // No valid image data found
+          console.warn("No valid image data in response:", imageResult);
+          showMessage("Couldn't generate a meal plan image, but your plan is ready!", 4000);
+          return false;
+        }
+      } catch (err) {
+        // Handle errors during image generation
+        console.error("Image generation error:", err);
+        showMessage("Couldn't generate an image, but your meal plan is ready!", 4000);
+        return false;
+      }
+    }
+
     // ---------- Submit ----------
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -714,48 +811,8 @@ async function fillMissingMealsForDay(dayName, missingNames, usedTitles, usedTok
         ensureDayTotals(plan);
         renderResults(plan, lastInputs);
 
-        // Plan image: generate via Gemini Images endpoint
-        try {
-          const imgPrompt = `Editorial food photography, natural light, 1200x800, appetizing meal spread inspired by ${ethnicity ||
-            "healthy"} cuisine and ${fitnessGoal || "wellness"} goals.`;
-
-          const imageResult = await secureApiCall("generate-plan", {
-            endpoint: "imagegeneration:generate",
-            body: {
-              contents: [{ parts: [{ text: imgPrompt }] }],
-              generationConfig: {
-                size: "1200x800",
-                mimeType: "image/png",
-                n: 1
-              }
-            }
-          });
-
-          let b64 =
-            imageResult?.generatedImages?.[0]?.bytesBase64Encoded ||
-            imageResult?.generatedImages?.[0]?.image?.bytesBase64Encoded ||
-            (imageResult?.candidates?.[0]?.content?.parts || []).find(
-              p => (p.inlineData && p.inlineData.data) || (p.inline_data && p.inline_data.data)
-            )?.inlineData?.data ||
-            (imageResult?.candidates?.[0]?.content?.parts || []).find(
-              p => p.inline_data && p.inline_data.data
-            )?.inline_data?.data ||
-            null;
-
-          if (b64 && mealPlanImage) {
-            mealPlanImage.onload = () => {
-              const wrap = document.getElementById("image-container");
-              if (wrap) wrap.style.display = "block";
-            };
-            mealPlanImage.onerror = () => {
-              const wrap = document.getElementById("image-container");
-              if (wrap) wrap.style.display = "none";
-            };
-            mealPlanImage.src = `data:image/png;base64,${b64}`;
-          }
-        } catch (imgErr) {
-          console.warn("Image generation failed:", imgErr);
-        }
+        // Generate meal plan image using the extracted function
+        await generateMealPlanImage(ethnicity, fitnessGoal);
 
         hideLoader();
         resultContainer.style.display = "block";
