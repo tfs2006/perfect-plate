@@ -422,6 +422,24 @@
       return day;
     }
 
+function capitalName(n){
+  const s = String(n||'');
+  return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : '';
+}
+
+async function fillMissingMealsForDay(dayName, missingNames, usedTitles, usedTokens, inputs) {
+  if (!missingNames || !missingNames.length) return [];
+  const avoidTitles = Array.from(usedTitles).slice(0, 200).join(', ');
+  const avoidTok = Array.from(usedTokens).slice(0, 200).join(', ');
+  const prompt = `Return STRICT JSON ONLY with this schema: {"meals":[{"name":"Breakfast|Lunch|Dinner","items":[{"title":"","calories":350,"protein":20,"carbs":55,"fat":9,"rationale":"","tags":[],"allergens":[],"substitutions":[],"prepTime":5,"cookTime":5,"ingredients":[{"item":"","qty":0.5,"unit":"","category":""}],"steps":["..."]}]}]}.\n\nCreate unique recipes ONLY for these meals on ${dayName}: ${missingNames.join(', ')}.\nAvoid titles: ${avoidTitles || 'none'}; avoid core keywords/themes: ${avoidTok || 'none'}.\nUser profile: ${JSON.stringify(inputs)}`;
+  const body = { contents: [{ parts: [{ text: prompt }] }], generationConfig: { response_mime_type: 'application/json', maxOutputTokens: 1800, temperature: 0.7 } };
+  const resp = await secureApiCall('generate-plan', { endpoint: 'gemini-1.5-flash:generateContent', body });
+  const text = getFirstPartText(resp);
+  const obj = extractFirstJSON(text);
+  if (obj && Array.isArray(obj.meals)) return obj.meals.map(m => ({ name: capitalName(m.name), items: Array.isArray(m.items) ? m.items : [] }));
+  return [];
+}
+
     // Enforce exactly Breakfast/Lunch/Dinner (one item each) per day
     function normalizeDayMeals(day){
       if (!day || !Array.isArray(day.meals)) { day.meals = []; }
@@ -654,7 +672,22 @@
             const part = await generateDay(day);
             if (part?.days?.[0]) {
               // Select unique items and track their titles and tokens
-              const processedDay = pickUniqueItemsForDay(part.days[0], usedTitles, usedTokens);
+              let processedDay = pickUniqueItemsForDay(part.days[0], usedTitles, usedTokens);
+              // If any meals are empty, request just those meals and merge
+              const missingNames = (processedDay.meals||[]).filter(m => !m.items || m.items.length === 0).map(m => m.name).filter(Boolean);
+              if (missingNames.length) {
+                const fills = await fillMissingMealsForDay(day, missingNames, usedTitles, usedTokens, lastInputs);
+                if (Array.isArray(fills) && fills.length) {
+                  fills.forEach(fm => {
+                    const idx = (processedDay.meals||[]).findIndex(m => String(m.name||'').toLowerCase() === String(fm.name||'').toLowerCase());
+                    if (idx >= 0 && Array.isArray(fm.items) && fm.items.length) {
+                      const tempDay = { meals: [ { name: processedDay.meals[idx].name, items: fm.items } ] };
+                      const chosen = pickUniqueItemsForDay(tempDay, usedTitles, usedTokens);
+                      processedDay.meals[idx].items = chosen.meals[0].items;
+                    }
+                  });
+                }
+              }
               daysOut.push(processedDay);
             } else {
               console.warn("No valid plan for", day);
@@ -702,8 +735,11 @@
             imageResult?.generatedImages?.[0]?.bytesBase64Encoded ||
             imageResult?.generatedImages?.[0]?.image?.bytesBase64Encoded ||
             (imageResult?.candidates?.[0]?.content?.parts || []).find(
-              p => p.inlineData && p.inlineData.data
+              p => (p.inlineData && p.inlineData.data) || (p.inline_data && p.inline_data.data)
             )?.inlineData?.data ||
+            (imageResult?.candidates?.[0]?.content?.parts || []).find(
+              p => p.inline_data && p.inline_data.data
+            )?.inline_data?.data ||
             null;
 
           if (b64 && mealPlanImage) {
@@ -713,7 +749,7 @@
             };
             mealPlanImage.onerror = () => {
               const wrap = document.getElementById("image-container");
-              if (wrap) wrap.style.display = "block";
+              if (wrap) wrap.style.display = "none";
             };
             mealPlanImage.src = `data:image/png;base64,${b64}`;
           }
@@ -898,7 +934,7 @@
 
     // Regenerate a single meal
     async function regenerateMeal(dayIdx, mealName) {
-      if (!currentPlan || !Array.isArray(currentPlan.days) || !dayIdx >= 0 || !mealName) {
+      if (!currentPlan || !Array.isArray(currentPlan.days) || dayIdx == null || Number.isNaN(Number(dayIdx)) || Number(dayIdx) < 0 || !mealName) {
         showMessage("Cannot regenerate meal: invalid parameters");
         return false;
       }
