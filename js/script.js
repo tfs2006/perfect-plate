@@ -235,10 +235,16 @@
   Do NOT repeat any recipe titles across the week. Avoid exactly these titles: ${avoidList}.
   Avoid these core keywords/themes across the week: ${avoidTokList}. Rotate proteins and grains; do not reuse the same main ingredient more than once.
 
+  ABSOLUTE UNIQUENESS REQUIREMENT:
+  - Every recipe (title AND core idea) must be unique for the full 7-day plan.
+  - If a candidate recipe is even *similar* to an earlier one (same main protein, same core flavour profile, or same cooking style), discard it and generate a different idea.
+  - Think "Would the user feel this is the same meal?" – if yes, it is a duplicate and must be replaced.
+
   Rules:
   - Output ONLY these days (inclusive, in order): ${daysList}.
   - EVERY meal MUST have 1–2 items; each item MUST include ingredients[] and steps[].
   - Within a day, Breakfast, Lunch, and Dinner must all be different recipes.
+  - Across days, no recipe title or near-duplicate concept may repeat.
   - Use integers for calories/protein/carbs/fat, prepTime, cookTime (round if needed).
   - Respect medical conditions: ${i.medicalConditions || 'None'}; exclusions: ${i.exclusions || 'None'}.
   - Cultural background: ${i.ethnicity}; goal: ${i.fitnessGoal}; diet prefs: ${(i.dietaryPrefs||[]).join(', ') || 'None'}; age ${i.age}; gender ${i.gender}.
@@ -335,8 +341,61 @@
       });
     }
 
+    // Calculate similarity between two recipe titles based on shared tokens
+    function calculateTitleSimilarity(title1, title2) {
+      if (!title1 || !title2) return 0;
+      
+      const tokens1 = new Set(extractTokens(title1));
+      const tokens2 = new Set(extractTokens(title2));
+      
+      if (tokens1.size === 0 || tokens2.size === 0) return 0;
+      
+      // Count shared tokens
+      let sharedCount = 0;
+      tokens1.forEach(token => {
+        if (tokens2.has(token)) sharedCount++;
+      });
+      
+      // Calculate Jaccard similarity: intersection / union
+      const unionSize = tokens1.size + tokens2.size - sharedCount;
+      return unionSize > 0 ? sharedCount / unionSize : 0;
+    }
+
+    // Calculate similarity between recipes based on ingredients
+    function calculateIngredientSimilarity(item1, item2) {
+      if (!item1?.ingredients || !item2?.ingredients) return 0;
+      
+      // Extract main ingredients (first 3-5 ingredients are usually the most important)
+      const getMainIngredients = (item) => {
+        const ingredients = [];
+        (item.ingredients || []).slice(0, 5).forEach(ing => {
+          if (typeof ing === 'string') {
+            ingredients.push(normalizeTitle(ing));
+          } else if (ing?.item) {
+            ingredients.push(normalizeTitle(ing.item));
+          }
+        });
+        return new Set(ingredients);
+      };
+      
+      const ingredients1 = getMainIngredients(item1);
+      const ingredients2 = getMainIngredients(item2);
+      
+      if (ingredients1.size === 0 || ingredients2.size === 0) return 0;
+      
+      // Count shared ingredients
+      let sharedCount = 0;
+      ingredients1.forEach(ing => {
+        if (ingredients2.has(ing)) sharedCount++;
+      });
+      
+      // Calculate Jaccard similarity: intersection / union
+      const unionSize = ingredients1.size + ingredients2.size - sharedCount;
+      return unionSize > 0 ? sharedCount / unionSize : 0;
+    }
+
     // Pick unique items for each meal in a day
-    function pickUniqueItemsForDay(day, usedTitles, usedTokens) {
+    function pickUniqueItemsForDay(day, usedTitles, usedTokens, allPreviousItems = []) {
       if (!day || !Array.isArray(day.meals)) { day.meals = []; }
       
       // Ensure we have the three standard meals
@@ -350,6 +409,7 @@
       // For each meal type, select a unique item
       const result = [];
       const dayUsedTitles = new Set(); // Track titles used within this day
+      const needsRegeneration = new Set(); // Track meals that need regeneration
       
       // Process each meal type
       want.forEach(mealType => {
@@ -358,14 +418,19 @@
           // Create empty meal if missing
           result.push({ 
             name: mealType.charAt(0).toUpperCase() + mealType.slice(1), 
-            items: [] 
+            items: [],
+            needsRegeneration: true
           });
+          needsRegeneration.add(mealType);
           return;
         }
         
         // Try to find an item whose title hasn't been used globally or within this day
         // AND whose tokens haven't been used
         let selectedItem = null;
+        let bestItem = null;
+        let lowestSimilarity = 1.0; // Start with maximum similarity
+        
         for (const item of meal.items) {
           const title = item.title || "";
           const normalizedTitle = normalizeTitle(title);
@@ -374,35 +439,34 @@
           const tokens = extractTokens(title);
           const hasUsedToken = tokens.some(token => usedTokens.has(token));
           
-          if (!usedTitles.has(normalizedTitle) && !dayUsedTitles.has(normalizedTitle) && !hasUsedToken) {
+          // Check for title similarity with previous items
+          let maxSimilarity = 0;
+          for (const prevItem of allPreviousItems) {
+            const titleSimilarity = calculateTitleSimilarity(title, prevItem.title);
+            const ingredientSimilarity = calculateIngredientSimilarity(item, prevItem);
+            const similarity = Math.max(titleSimilarity, ingredientSimilarity);
+            maxSimilarity = Math.max(maxSimilarity, similarity);
+          }
+          
+          // If we find a completely unique item, use it immediately
+          if (!usedTitles.has(normalizedTitle) && !dayUsedTitles.has(normalizedTitle) && !hasUsedToken && maxSimilarity < 0.3) {
             selectedItem = item;
             usedTitles.add(normalizedTitle);
             dayUsedTitles.add(normalizedTitle);
             tokens.forEach(token => usedTokens.add(token));
             break;
           }
-        }
-        
-        // If all items have used tokens, try to find one with just a unique title
-        if (!selectedItem) {
-          for (const item of meal.items) {
-            const title = item.title || "";
-            const normalizedTitle = normalizeTitle(title);
-            if (!normalizedTitle) continue;
-            
-            if (!usedTitles.has(normalizedTitle) && !dayUsedTitles.has(normalizedTitle)) {
-              selectedItem = item;
-              usedTitles.add(normalizedTitle);
-              dayUsedTitles.add(normalizedTitle);
-              extractTokens(title).forEach(token => usedTokens.add(token));
-              break;
-            }
+          
+          // Otherwise, keep track of the item with the lowest similarity
+          if (maxSimilarity < lowestSimilarity) {
+            lowestSimilarity = maxSimilarity;
+            bestItem = item;
           }
         }
         
-        // If all items are duplicates, just use the first one
-        if (!selectedItem && meal.items.length > 0) {
-          selectedItem = meal.items[0];
+        // If we didn't find a completely unique item but have a best candidate
+        if (!selectedItem && bestItem && lowestSimilarity < 0.5) {
+          selectedItem = bestItem;
           const normalizedTitle = normalizeTitle(selectedItem.title || "");
           if (normalizedTitle) {
             usedTitles.add(normalizedTitle);
@@ -411,14 +475,28 @@
           }
         }
         
-        // Add the selected item to the result
-        result.push({
-          name: meal.name || (mealType.charAt(0).toUpperCase() + mealType.slice(1)),
-          items: selectedItem ? [selectedItem] : []
-        });
+        // If all items are too similar, mark for regeneration instead of using a duplicate
+        if (!selectedItem) {
+          needsRegeneration.add(mealType);
+          result.push({
+            name: meal.name || (mealType.charAt(0).toUpperCase() + mealType.slice(1)),
+            items: meal.items.length > 0 ? [meal.items[0]] : [],
+            needsRegeneration: true
+          });
+        } else {
+          // Add the selected item to the result
+          result.push({
+            name: meal.name || (mealType.charAt(0).toUpperCase() + mealType.slice(1)),
+            items: [selectedItem]
+          });
+          
+          // Add to the list of previous items for future similarity checks
+          allPreviousItems.push(selectedItem);
+        }
       });
       
       day.meals = result;
+      day.needsRegeneration = needsRegeneration.size > 0 ? Array.from(needsRegeneration) : null;
       return day;
     }
 
@@ -472,6 +550,143 @@
       }
       // Filter out any accidental nulls and assign back
       day.meals = result.filter(Boolean);
+    }
+
+    // Function to capitalize meal name
+    function capitalName(n){
+      const s = String(n||'');
+      return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : '';
+    }
+
+    // Function to generate meals for missing or duplicate items
+    async function fillMissingMealsForDay(dayName, missingNames, usedTitles, usedTokens, inputs, allPreviousItems = []) {
+      if (!missingNames || !missingNames.length) return [];
+      
+      const avoidTitles = Array.from(usedTitles).slice(0, 200).join(', ');
+      const avoidTok = Array.from(usedTokens).slice(0, 200).join(', ');
+      
+      // Create a more detailed prompt that emphasizes uniqueness
+      const prompt = `Return STRICT JSON ONLY with this schema: {"meals":[{"name":"Breakfast|Lunch|Dinner","items":[{"title":"","calories":350,"protein":20,"carbs":55,"fat":9,"rationale":"","tags":[],"allergens":[],"substitutions":[],"prepTime":5,"cookTime":5,"ingredients":[{"item":"","qty":0.5,"unit":"","category":""}],"steps":["..."]}]}]}.
+
+Create ABSOLUTELY UNIQUE recipes ONLY for these meals on ${dayName}: ${missingNames.join(', ')}.
+These recipes MUST be completely different from any other recipe in the 7-day plan.
+
+Avoid these exact titles: ${avoidTitles || 'none'}.
+Avoid these core keywords/themes: ${avoidTok || 'none'}.
+
+UNIQUENESS REQUIREMENTS:
+1. Use different main proteins, cooking methods, and flavor profiles than ALL other recipes in the plan
+2. Ensure the recipe concept is not similar to any existing recipe
+3. Each recipe must have a distinctive character and not feel like a variation of another dish
+
+User profile: ${JSON.stringify(inputs)}`;
+
+      const body = { 
+        contents: [{ parts: [{ text: prompt }] }], 
+        generationConfig: { 
+          response_mime_type: 'application/json', 
+          maxOutputTokens: 1800, 
+          temperature: 0.7 
+        } 
+      };
+      
+      const resp = await secureApiCall('generate-plan', { endpoint: 'gemini-1.5-flash:generateContent', body });
+      const text = getFirstPartText(resp);
+      const obj = extractFirstJSON(text);
+      
+      if (obj && Array.isArray(obj.meals)) {
+        return obj.meals.map(m => ({ 
+          name: capitalName(m.name), 
+          items: Array.isArray(m.items) ? m.items : [] 
+        }));
+      }
+      
+      return [];
+    }
+
+    // Function to scan the entire plan for duplicates and regenerate them
+    async function regenerateDuplicateMeals(plan, inputs) {
+      if (!plan || !Array.isArray(plan.days)) return plan;
+      
+      // First, collect all recipe items across the plan
+      const allItems = [];
+      const duplicatesToFix = [];
+      
+      // Collect all items and identify potential duplicates
+      plan.days.forEach((day, dayIdx) => {
+        (day.meals || []).forEach((meal, mealIdx) => {
+          if (Array.isArray(meal.items) && meal.items.length > 0) {
+            const item = meal.items[0];
+            
+            // Check if this item is too similar to any existing item
+            let isDuplicate = false;
+            let highestSimilarity = 0;
+            let similarToItem = null;
+            
+            for (const existingItem of allItems) {
+              const titleSimilarity = calculateTitleSimilarity(item.title, existingItem.item.title);
+              const ingredientSimilarity = calculateIngredientSimilarity(item, existingItem.item);
+              const similarity = Math.max(titleSimilarity, ingredientSimilarity);
+              
+              if (similarity > 0.5) { // Threshold for considering as duplicate
+                isDuplicate = true;
+                if (similarity > highestSimilarity) {
+                  highestSimilarity = similarity;
+                  similarToItem = existingItem;
+                }
+              }
+            }
+            
+            if (isDuplicate) {
+              duplicatesToFix.push({
+                dayIdx,
+                mealName: meal.name,
+                similarity: highestSimilarity,
+                similarTo: similarToItem
+              });
+              console.warn(`Duplicate detected: ${item.title} (${day.day}, ${meal.name}) is similar to ${similarToItem.item.title} (${similarToItem.day}, ${similarToItem.mealName})`);
+            } else {
+              // Not a duplicate, add to our collection
+              allItems.push({
+                dayIdx,
+                day: day.day,
+                mealName: meal.name,
+                mealIdx,
+                item
+              });
+            }
+          }
+        });
+      });
+      
+      // If we found duplicates, regenerate them one by one
+      if (duplicatesToFix.length > 0) {
+        console.log(`Found ${duplicatesToFix.length} duplicate meals to regenerate`);
+        showMessage(`Improving meal variety... (${duplicatesToFix.length} recipes)`, 5000);
+        
+        // Sort by similarity (highest first) to fix the most obvious duplicates first
+        duplicatesToFix.sort((a, b) => b.similarity - a.similarity);
+        
+        for (const duplicate of duplicatesToFix) {
+          await regenerateMeal(duplicate.dayIdx, duplicate.mealName);
+          
+          // After regeneration, update our collection of items
+          const updatedItem = plan.days[duplicate.dayIdx].meals.find(
+            m => String(m.name).toLowerCase() === String(duplicate.mealName).toLowerCase()
+          )?.items[0];
+          
+          if (updatedItem) {
+            allItems.push({
+              dayIdx: duplicate.dayIdx,
+              day: plan.days[duplicate.dayIdx].day,
+              mealName: duplicate.mealName,
+              item: updatedItem
+            });
+          }
+        }
+      }
+      
+      return plan;
     }
 
     // ---------- Why-this-plan card ----------
@@ -529,6 +744,7 @@
         const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
         const usedTitles = new Set(); // Track used titles across all days
         const usedTokens = new Set(); // Track used tokens across all days
+        const allPreviousItems = []; // Track all previously generated items for similarity checks
 
         async function generateDay(dayName) {
           async function tryOnce(maxTokens, temperature, useSchema = true) {
@@ -654,7 +870,45 @@
             const part = await generateDay(day);
             if (part?.days?.[0]) {
               // Select unique items and track their titles and tokens
-              const processedDay = pickUniqueItemsForDay(part.days[0], usedTitles, usedTokens);
+              const processedDay = pickUniqueItemsForDay(part.days[0], usedTitles, usedTokens, allPreviousItems);
+              
+              // If any meals need regeneration due to duplicates, generate them now
+              if (processedDay.needsRegeneration && processedDay.needsRegeneration.length > 0) {
+                const fills = await fillMissingMealsForDay(
+                  day, 
+                  processedDay.needsRegeneration, 
+                  usedTitles, 
+                  usedTokens, 
+                  lastInputs,
+                  allPreviousItems
+                );
+                
+                if (Array.isArray(fills) && fills.length) {
+                  fills.forEach(fm => {
+                    const idx = (processedDay.meals||[]).findIndex(m => 
+                      String(m.name||'').toLowerCase() === String(fm.name||'').toLowerCase());
+                    
+                    if (idx >= 0 && Array.isArray(fm.items) && fm.items.length) {
+                      // Use the new unique item
+                      const tempDay = { meals: [ { name: processedDay.meals[idx].name, items: fm.items } ] };
+                      const chosen = pickUniqueItemsForDay(tempDay, usedTitles, usedTokens, allPreviousItems);
+                      
+                      // Update the meal with the regenerated item
+                      processedDay.meals[idx].items = chosen.meals[0].items;
+                      processedDay.meals[idx].needsRegeneration = false;
+                      
+                      // Add to previous items for future similarity checks
+                      if (chosen.meals[0].items.length > 0) {
+                        allPreviousItems.push(chosen.meals[0].items[0]);
+                      }
+                    }
+                  });
+                }
+                
+                // Remove the regeneration flag
+                delete processedDay.needsRegeneration;
+              }
+              
               daysOut.push(processedDay);
             } else {
               console.warn("No valid plan for", day);
@@ -677,6 +931,9 @@
         // We've already picked unique items, so normalizeDayMeals should just ensure structure
         // (it won't change items if there's already exactly one per meal)
         (plan.days || []).forEach(normalizeDayMeals);
+        
+        // Perform a final check for duplicates across the entire plan and regenerate if needed
+        plan = await regenerateDuplicateMeals(plan, lastInputs);
 
         ensureDayTotals(plan);
         renderResults(plan, lastInputs);
@@ -713,7 +970,7 @@
             };
             mealPlanImage.onerror = () => {
               const wrap = document.getElementById("image-container");
-              if (wrap) wrap.style.display = "block";
+              if (wrap) wrap.style.display = "none";
             };
             mealPlanImage.src = `data:image/png;base64,${b64}`;
           }
@@ -898,7 +1155,7 @@
 
     // Regenerate a single meal
     async function regenerateMeal(dayIdx, mealName) {
-      if (!currentPlan || !Array.isArray(currentPlan.days) || !dayIdx >= 0 || !mealName) {
+      if (!currentPlan || !Array.isArray(currentPlan.days) || dayIdx < 0 || !mealName) {
         showMessage("Cannot regenerate meal: invalid parameters");
         return false;
       }
@@ -919,6 +1176,18 @@
 
       // Compute current used titles and tokens
       const {titles: usedTitles, tokens: usedTokens} = computeUsedSets(currentPlan);
+      
+      // Collect all existing items for similarity checks
+      const allItems = [];
+      currentPlan.days.forEach((d, dIdx) => {
+        if (dIdx === dayIdx) return; // Skip the current day
+        (d.meals || []).forEach(m => {
+          if (String(m?.name || "").toLowerCase() === String(mealName).toLowerCase()) return; // Skip the meal we're regenerating
+          (m.items || []).forEach(it => {
+            allItems.push(it);
+          });
+        });
+      });
 
       try {
         // Show a small loader
@@ -927,8 +1196,13 @@
         // Build a prompt for just this meal
         const prompt = `Generate a single unique recipe for ${mealName} on ${day.day || `Day ${dayIdx+1}`}.
         
-This must be different from all existing recipes in the plan. Avoid these titles: ${Array.from(usedTitles).join(", ")}.
+This must be COMPLETELY DIFFERENT from all existing recipes in the plan. Avoid these titles: ${Array.from(usedTitles).join(", ")}.
 Avoid these core ingredients/themes: ${Array.from(usedTokens).join(", ")}.
+
+ABSOLUTE UNIQUENESS REQUIREMENT:
+- The recipe must not share main ingredients, cooking methods, or flavor profiles with any other recipe in the plan
+- It should feel like a completely different dish, not just a variation of another meal
+- Use different cuisines, cooking techniques, or meal formats to ensure variety
 
 Return STRICT JSON ONLY with this schema:
 {
@@ -974,9 +1248,55 @@ Meal to replace: ${mealName} on ${day.day || `Day ${dayIdx+1}`}`;
           showMessage("Invalid recipe format returned");
           return false;
         }
-
-        // Update the meal in the current plan
-        currentPlan.days[dayIdx].meals[mealIdx].items = [newItem];
+        
+        // Check if the new item is too similar to existing items
+        let isTooSimilar = false;
+        for (const existingItem of allItems) {
+          const titleSimilarity = calculateTitleSimilarity(newItem.title, existingItem.title);
+          const ingredientSimilarity = calculateIngredientSimilarity(newItem, existingItem);
+          const similarity = Math.max(titleSimilarity, ingredientSimilarity);
+          
+          if (similarity > 0.5) {
+            isTooSimilar = true;
+            console.warn(`Generated item is still too similar: ${newItem.title} is similar to ${existingItem.title} (similarity: ${similarity.toFixed(2)})`);
+            break;
+          }
+        }
+        
+        // If still too similar, try one more time with higher temperature
+        if (isTooSimilar) {
+          showMessage("Improving recipe uniqueness...", 5000);
+          
+          const retryResp = await secureApiCall("generate-plan", {
+            endpoint: "gemini-1.5-flash:generateContent",
+            body: {
+              contents: [{ parts: [{ text: prompt + "\n\nIMPORTANT: Previous attempt was too similar to existing recipes. Make this COMPLETELY DIFFERENT in ingredients, cooking style, and overall concept." }] }],
+              generationConfig: {
+                maxOutputTokens: 1500,
+                temperature: 0.9, // Higher temperature for more creativity
+                response_mime_type: "application/json"
+              }
+            }
+          });
+          
+          const retryText = getFirstPartText(retryResp);
+          if (retryText) {
+            const retryItem = extractFirstJSON(retryText);
+            if (retryItem && retryItem.title) {
+              // Use the retry item
+              currentPlan.days[dayIdx].meals[mealIdx].items = [retryItem];
+            } else {
+              // Fall back to the original new item
+              currentPlan.days[dayIdx].meals[mealIdx].items = [newItem];
+            }
+          } else {
+            // Fall back to the original new item
+            currentPlan.days[dayIdx].meals[mealIdx].items = [newItem];
+          }
+        } else {
+          // Use the new item directly
+          currentPlan.days[dayIdx].meals[mealIdx].items = [newItem];
+        }
         
         // Re-render the day panel
         const tabPanel = $(`tab-${dayIdx}`);
