@@ -11,6 +11,11 @@
   const debounce = (fn, wait) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), wait); }; };
   const fmt = (x) => (x == null || isNaN(Number(x))) ? "-" : Number(x).toFixed(0);
   const escapeHTML = (s) => String(s).replace(/[&<>\"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", "\"":"&quot;", "'":"&#39;" }[c]));
+  
+  // Normalize title for comparison (to avoid duplicates)
+  function normalizeTitle(s){
+    return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+  }
 
   // Pretty quantity for grocery labels (e.g., 1.5 -> "1 1/2")
   function formatQty(n){
@@ -172,7 +177,7 @@
     }
 
     // ---------- Prompt (detailed) ----------
-    function buildJsonPromptRange(i, daysArray) {
+    function buildJsonPromptRange(i, daysArray, avoidTitles = []) {
       const profile = {
         age: i.age, gender: i.gender, ethnicity: i.ethnicity,
         goal: i.fitnessGoal, dietPrefs: i.dietaryPrefs, exclusions: i.exclusions,
@@ -180,6 +185,7 @@
       };
 
       const daysList = daysArray.join(", ");
+      const avoidList = avoidTitles.length ? avoidTitles.join(", ") : "none yet";
 
       return `Return STRICT JSON ONLY (no markdown) with this schema:
 
@@ -216,9 +222,12 @@
     ]
   }
 
+  Do NOT repeat any recipe titles across the week. Avoid exactly these titles: ${avoidList}.
+
   Rules:
   - Output ONLY these days (inclusive, in order): ${daysList}.
   - EVERY meal MUST have 1–2 items; each item MUST include ingredients[] and steps[].
+  - Within a day, Breakfast, Lunch, and Dinner must all be different recipes.
   - Use integers for calories/protein/carbs/fat, prepTime, cookTime (round if needed).
   - Respect medical conditions: ${i.medicalConditions || 'None'}; exclusions: ${i.exclusions || 'None'}.
   - Cultural background: ${i.ethnicity}; goal: ${i.fitnessGoal}; diet prefs: ${(i.dietaryPrefs||[]).join(', ') || 'None'}; age ${i.age}; gender ${i.gender}.
@@ -315,6 +324,70 @@
       });
     }
 
+    // Pick unique items for each meal in a day
+    function pickUniqueItemsForDay(day, usedTitles) {
+      if (!day || !Array.isArray(day.meals)) { day.meals = []; }
+      
+      // Ensure we have the three standard meals
+      const want = ["breakfast", "lunch", "dinner"];
+      const byName = new Map();
+      (day.meals || []).forEach(m => {
+        const key = String(m?.name || "").toLowerCase().trim();
+        if (!byName.has(key)) byName.set(key, m);
+      });
+      
+      // For each meal type, select a unique item
+      const result = [];
+      const dayUsedTitles = new Set(); // Track titles used within this day
+      
+      // Process each meal type
+      want.forEach(mealType => {
+        const meal = byName.get(mealType);
+        if (!meal || !Array.isArray(meal.items) || meal.items.length === 0) {
+          // Create empty meal if missing
+          result.push({ 
+            name: mealType.charAt(0).toUpperCase() + mealType.slice(1), 
+            items: [] 
+          });
+          return;
+        }
+        
+        // Try to find an item whose title hasn't been used globally or within this day
+        let selectedItem = null;
+        for (const item of meal.items) {
+          const title = item.title || "";
+          const normalizedTitle = normalizeTitle(title);
+          if (!normalizedTitle) continue;
+          
+          if (!usedTitles.has(normalizedTitle) && !dayUsedTitles.has(normalizedTitle)) {
+            selectedItem = item;
+            usedTitles.add(normalizedTitle);
+            dayUsedTitles.add(normalizedTitle);
+            break;
+          }
+        }
+        
+        // If all items are duplicates, just use the first one
+        if (!selectedItem && meal.items.length > 0) {
+          selectedItem = meal.items[0];
+          const normalizedTitle = normalizeTitle(selectedItem.title || "");
+          if (normalizedTitle) {
+            usedTitles.add(normalizedTitle);
+            dayUsedTitles.add(normalizedTitle);
+          }
+        }
+        
+        // Add the selected item to the result
+        result.push({
+          name: meal.name || (mealType.charAt(0).toUpperCase() + mealType.slice(1)),
+          items: selectedItem ? [selectedItem] : []
+        });
+      });
+      
+      day.meals = result;
+      return day;
+    }
+
     // Enforce exactly Breakfast/Lunch/Dinner (one item each) per day
     function normalizeDayMeals(day){
       if (!day || !Array.isArray(day.meals)) { day.meals = []; }
@@ -328,6 +401,8 @@
       const pickOneItem = (m) => {
         if (!m) return null;
         if (!Array.isArray(m.items) || m.items.length === 0) return null;
+        // Don't modify if already has exactly one item
+        if (m.items.length === 1) return m;
         m.items = [m.items[0]]; // exactly one item per meal
         return m;
       };
@@ -405,10 +480,11 @@
       try {
         // Generate each day individually to avoid long JSON truncation and make parsing more reliable
         const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+        const usedTitles = new Set(); // Track used titles across all days
 
         async function generateDay(dayName) {
           async function tryOnce(maxTokens, temperature, useSchema = true) {
-            const prompt = buildJsonPromptRange(lastInputs, [dayName]);
+            const prompt = buildJsonPromptRange(lastInputs, [dayName], Array.from(usedTitles).slice(0, 100));
             const body = {
               contents: [{ parts: [{ text: prompt }] }],
               generationConfig: {
@@ -527,7 +603,9 @@
           try {
             const part = await generateDay(day);
             if (part?.days?.[0]) {
-              daysOut.push(part.days[0]);
+              // Select unique items and track their titles
+              const processedDay = pickUniqueItemsForDay(part.days[0], usedTitles);
+              daysOut.push(processedDay);
             } else {
               console.warn("No valid plan for", day);
             }
@@ -546,7 +624,8 @@
           days: daysOut
         };
 
-        // Normalize meals per day
+        // We've already picked unique items, so normalizeDayMeals should just ensure structure
+        // (it won't change items if there's already exactly one per meal)
         (plan.days || []).forEach(normalizeDayMeals);
 
         ensureDayTotals(plan);
