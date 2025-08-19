@@ -12,6 +12,53 @@
   const fmt = (x) => (x == null || isNaN(Number(x))) ? "-" : Number(x).toFixed(0);
   const escapeHTML = (s) => String(s).replace(/[&<>\"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", "\"":"&quot;", "'":"&#39;" }[c]));
 
+  // Pretty quantity for grocery labels (e.g., 1.5 -> "1 1/2")
+  function formatQty(n){
+    if (n == null || isNaN(Number(n))) return "";
+    const v = Number(n);
+    const whole = Math.trunc(v);
+    const frac = Math.abs(v - whole);
+    const asFrac = (f) => {
+      if (Math.abs(f - 0.25) < 0.02) return "1/4";
+      if (Math.abs(f - 0.33) < 0.03 || Math.abs(f - 1/3) < 0.03) return "1/3";
+      if (Math.abs(f - 0.5)  < 0.02) return "1/2";
+      if (Math.abs(f - 0.66) < 0.03 || Math.abs(f - 2/3) < 0.03) return "2/3";
+      if (Math.abs(f - 0.75) < 0.02) return "3/4";
+      return null;
+    };
+    const f = asFrac(frac);
+    if (whole === 0) return f ? f : v.toFixed(2).replace(/\.00$/, "");
+    return f ? `${whole} ${f}` : v % 1 === 0 ? String(whole) : v.toFixed(2).replace(/\.00$/, "");
+  }
+
+  // -------- Parse arbitrary quantity representations to a Number ----------
+  function parseQuantity(q) {
+    if (q == null || (typeof q === "string" && q.trim() === "")) return null;
+    if (typeof q === "number") return Number.isFinite(q) ? q : null;
+
+    if (typeof q === "string") {
+      let s = q.trim()
+        .replace(/½/g, "1/2")
+        .replace(/¼/g, "1/4")
+        .replace(/¾/g, "3/4")
+        .replace(/⅓/g, "1/3")
+        .replace(/⅔/g, "2/3");
+
+      // mixed fraction e.g. "1 1/2"
+      let m = s.match(/^([0-9]+(?:\.[0-9]+)?)\s+([0-9]+)\/([0-9]+)$/);
+      if (m) return Number(m[1]) + Number(m[2]) / Number(m[3]);
+
+      // simple fraction e.g. "3/4"
+      m = s.match(/^([0-9]+)\/([0-9]+)$/);
+      if (m) return Number(m[1]) / Number(m[2]);
+
+      // decimal or integer
+      m = s.match(/^([0-9]+(?:\.[0-9]+)?)$/);
+      if (m) return Number(m[1]);
+    }
+    return null;
+  }
+
   // ---------- App ----------
   ready(() => {
     initIcons();
@@ -268,6 +315,47 @@
       });
     }
 
+    // Enforce exactly Breakfast/Lunch/Dinner (one item each) per day
+    function normalizeDayMeals(day){
+      if (!day || !Array.isArray(day.meals)) { day.meals = []; }
+      const want = ["breakfast","lunch","dinner"];
+      const byName = new Map();
+      (day.meals || []).forEach(m => {
+        const key = String(m?.name || "").toLowerCase().trim();
+        if (!byName.has(key)) byName.set(key, m);
+      });
+
+      const pickOneItem = (m) => {
+        if (!m) return null;
+        if (!Array.isArray(m.items) || m.items.length === 0) return null;
+        m.items = [m.items[0]]; // exactly one item per meal
+        return m;
+      };
+
+      const result = [];
+      // Use existing meals if present
+      want.forEach(w => {
+        const m = byName.get(w);
+        if (m) result.push(pickOneItem({ ...m, name: m.name || (w.charAt(0).toUpperCase()+w.slice(1)) }));
+      });
+      // If any missing, try to repurpose other meals (e.g., snacks) or duplicate breakfast item
+      const others = (day.meals || []).filter(m => !want.includes(String(m?.name || "").toLowerCase()));
+      while (result.length < 3) {
+        const needed = want[result.length];
+        let source = result[0] || others.shift();
+        if (!source) break;
+        const clone = JSON.parse(JSON.stringify(source));
+        clone.name = needed.charAt(0).toUpperCase()+needed.slice(1);
+        pickOneItem(clone);
+        result.push(clone);
+      }
+      // Final fallback: create empty shells so UI remains consistent
+      while (result.length < 3) {
+        result.push({ name: (want[result.length].charAt(0).toUpperCase()+want[result.length].slice(1)), items: [] });
+      }
+      day.meals = result;
+    }
+
     // ---------- Why-this-plan card ----------
     function buildWhyThisPlan(plan, inputs){
       const bullets = new Map();
@@ -458,19 +546,19 @@
           days: daysOut
         };
 
+        // Normalize meals per day
+        (plan.days || []).forEach(normalizeDayMeals);
+
         ensureDayTotals(plan);
         renderResults(plan, lastInputs);
 
-        // Optional image (best-effort; non-fatal)
+        // Plan image: use Unsplash featured image related to cuisine/goal (no API key required)
         try {
-          const imgPrompt = `Flat-lay, appetizing mixed dishes inspired by ${ethnicity} cuisine, vibrant healthy colors, natural light, wooden table; editorial food photography.`;
-          const imageResult = await secureApiCall("generate-plan", {
-            endpoint: "imagen-3.0-generate-002:predict",
-            body: { instances: [{ prompt: imgPrompt }], parameters: { sampleCount: 1 } }
-          });
-          const b64 = imageResult?.predictions?.[0]?.bytesBase64Encoded;
-          if (b64 && mealPlanImage) mealPlanImage.src = `data:image/png;base64,${b64}`;
-        } catch (imgErr) { console.warn("Image generation failed:", imgErr); }
+          const cuisine = encodeURIComponent(ethnicity || "healthy");
+          const theme = encodeURIComponent(fitnessGoal || "wellness");
+          const url = `https://source.unsplash.com/featured/1200x800?food,healthy,${cuisine},${theme}`;
+          if (mealPlanImage) mealPlanImage.src = url;
+        } catch (imgErr) { console.warn("Image load failed:", imgErr); }
 
         hideLoader();
         resultContainer.style.display = "block";
@@ -634,18 +722,40 @@
       if (typeof ing === "object" && ing.item) {
         return {
           item: String(ing.item),
-          qty: (ing.qty != null ? Number(ing.qty) : null),
+          qty: parseQuantity(ing.qty),
           unit: ing.unit || "",
           category: ing.category || "Other"
         };
       }
       if (typeof ing === "string") {
-        const s = ing.trim();
-        // Try to parse patterns like "0.5 cup rolled oats" or "2 tbsp olive oil"
-        const m = s.match(/^(\d+(?:\.\d+)?)\s*(?:([a-zA-Z]+)\b)?\s*(.*)$/);
-        if (m && m[3]) {
-          return { item: m[3].trim(), qty: Number(m[1]), unit: m[2] || "", category: "Other" };
+        // Normalize unicode fractions
+        let s = ing.trim()
+          .replace(/½/g, "1/2")
+          .replace(/¼/g, "1/4")
+          .replace(/¾/g, "3/4")
+          .replace(/⅓/g, "1/3")
+          .replace(/⅔/g, "2/3")
+          .replace(/\s+/g, " ");
+
+        // mixed fraction: "1 1/2 cup oats"
+        let m = s.match(/^(\d+(?:\.\d+)?)\s+(\d+)\/(\d+)\s*([a-zA-Z]+)?\s*(.*)$/);
+        if (m) {
+          const qty = Number(m[1]) + Number(m[2]) / Number(m[3]);
+          return { item: (m[5] || "").trim() || (m[4] || ""), qty, unit: (m[4] || ""), category: "Other" };
         }
+        // simple fraction: "1/2 cup oats"
+        m = s.match(/^(\d+)\/(\d+)\s*([a-zA-Z]+)?\s*(.*)$/);
+        if (m) {
+          const qty = Number(m[1]) / Number(m[2]);
+          return { item: (m[4] || "").trim() || (m[3] || ""), qty, unit: (m[3] || ""), category: "Other" };
+        }
+        // decimal or integer: "2 tbsp oil" or "0.5 cup milk"
+        m = s.match(/^(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?\s*(.*)$/);
+        if (m) {
+          const qty = Number(m[1]);
+          return { item: (m[3] || "").trim() || (m[2] || ""), qty, unit: (m[2] || ""), category: "Other" };
+        }
+        // fallback: just item name
         return { item: s, qty: null, unit: "", category: "Other" };
       }
       return null;
@@ -657,8 +767,11 @@
       const add = (item, qty, unit, category) => {
         const cat = (category || "Other").trim() || "Other";
         const key = `${cat}||${item.toLowerCase()}|${(unit||'').toLowerCase()}`;
-        const prev = byKey.get(key) || { item, qty: 0, unit: unit || "", category: cat };
-        prev.qty += (Number(qty) || 0);
+        const prev = byKey.get(key) || { item, qty: null, unit: unit || "", category: cat };
+        const num = (qty == null ? null : Number(qty));
+        if (Number.isFinite(num)) {
+          prev.qty = (prev.qty == null ? num : prev.qty + num);
+        }
         byKey.set(key, prev);
       };
 
@@ -716,7 +829,7 @@
         return {
           category: cat,
           items: items.map(x => ({
-            label: `${x.item}${x.qty ? ` — ${fmt(x.qty)} ${x.unit}` : ""}`,
+            label: `${x.item}${(x.qty != null && x.qty > 0) ? ` — ${formatQty(x.qty)} ${x.unit}` : ""}`,
             item: x.item,
             qty: x.qty,
             unit: x.unit
@@ -761,7 +874,7 @@
       const rows = [["Category","Item","Qty","Unit"]];
       groups.forEach(g => {
         (g.items || []).forEach(it => {
-          rows.push([g.category || "", it.item || "", it.qty != null ? fmt(it.qty) : "", it.unit || ""]);
+          rows.push([g.category || "", it.item || "", it.qty != null ? formatQty(it.qty) : "", it.unit || ""]);
         });
       });
       return rows.map(r => r.map(csvEscape).join(",")).join("\n");
