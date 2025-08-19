@@ -444,8 +444,16 @@
       const result = [];
       // Use existing meals if present
       want.forEach(w => {
-        const m = byName.get(w);
-        if (m) result.push(pickOneItem({ ...m, name: m.name || (w.charAt(0).toUpperCase()+w.slice(1)) }));
+        const cap = w.charAt(0).toUpperCase() + w.slice(1);
+        const src = byName.get(w);
+        if (src) {
+          const picked = pickOneItem({ ...src, name: src.name || cap });
+          // if pickOneItem returned null (no valid items) push an empty shell
+          result.push(picked || { name: cap, items: [] });
+        } else {
+          // no meal at all -> push empty shell to keep structure
+          result.push({ name: cap, items: [] });
+        }
       });
       // If any missing, try to repurpose other meals (e.g., snacks) or duplicate breakfast item
       const others = (day.meals || []).filter(m => !want.includes(String(m?.name || "").toLowerCase()));
@@ -462,7 +470,8 @@
       while (result.length < 3) {
         result.push({ name: (want[result.length].charAt(0).toUpperCase()+want[result.length].slice(1)), items: [] });
       }
-      day.meals = result;
+      // Filter out any accidental nulls and assign back
+      day.meals = result.filter(Boolean);
     }
 
     // ---------- Why-this-plan card ----------
@@ -780,7 +789,7 @@
     }
 
     function renderDayHTML(day, dayIndex) {
-      const meals = day.meals || [];
+      const meals = (day.meals || []).filter(m => m && typeof m === "object");
       const summary = day.summary ? `<p class="text-sm text-gray-600 mb-4">${escapeHTML(day.summary)}</p>` : "";
       const totals = day.totals
         ? `<p class="text-xs text-gray-500 mb-6">Daily totals: ${fmt(day.totals.calories)} kcal · P ${fmt(day.totals.protein)}g · C ${fmt(day.totals.carbs)}g · F ${fmt(day.totals.fat)}g</p>`
