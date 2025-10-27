@@ -971,14 +971,13 @@ User profile: ${JSON.stringify(inputs)}`;
 
         if (!daysOut.length) {
           // Provide more specific error message based on what failed
-          const errorDetails = dayErrors.length > 0
-            ? (() => {
-                const errorSummary = dayErrors.slice(0, 3).join('; ');
-                const moreErrorsText = dayErrors.length > 3 ? ` (and ${dayErrors.length - 3} more errors)` : '';
-                return `Failed to generate any days. ${errorSummary}${moreErrorsText}. Check console for details.`;
-              })()
-            : "Failed to generate meal plan. The API may be unavailable or returned invalid data. Please check your API configuration and try again.";
-          throw new Error(errorDetails);
+          if (dayErrors.length > 0) {
+            const errorSummary = dayErrors.slice(0, 3).join('; ');
+            const moreErrorsText = dayErrors.length > 3 ? ` (and ${dayErrors.length - 3} more errors)` : '';
+            throw new Error(`Failed to generate any days. ${errorSummary}${moreErrorsText}. Check console for details.`);
+          } else {
+            throw new Error("Failed to generate meal plan. The API may be unavailable or returned invalid data. Please check your API configuration and try again.");
+          }
         }
 
         let plan = {
