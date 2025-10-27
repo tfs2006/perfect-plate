@@ -220,72 +220,26 @@
       }
     }
 
-    // ---------- Prompt (detailed) ----------
+    // ---------- Prompt (simplified for token efficiency) ----------
     function buildJsonPromptRange(i, daysArray, avoidTitles = [], avoidTokens = []) {
-      const profile = {
-        age: i.age, gender: i.gender, ethnicity: i.ethnicity,
-        goal: i.fitnessGoal, dietPrefs: i.dietaryPrefs, exclusions: i.exclusions,
-        medicalConditions: i.medicalConditions
-      };
-
       const daysList = daysArray.join(", ");
-      const avoidList = avoidTitles.length ? avoidTitles.join(", ") : "none yet";
-      const avoidTokList = avoidTokens.length ? avoidTokens.join(", ") : "none yet";
+      // Limit avoid lists to prevent prompt from being too long
+      const avoidList = avoidTitles.length ? avoidTitles.slice(0, 30).join(", ") : "none";
+      const avoidTok = avoidTokens.length ? avoidTokens.slice(0, 40).join(", ") : "none";
 
-      return `Return STRICT JSON ONLY (no markdown) with this schema:
+      return `JSON ONLY (no markdown). Schema:
+{"days":[{"day":"Monday","summary":"Brief overview","totals":{"calories":1800,"protein":120,"carbs":180,"fat":60},"meals":[{"name":"Breakfast","items":[{"title":"Oatmeal with Berries","calories":350,"protein":20,"carbs":55,"fat":9,"rationale":"Brief reason","tags":["High-fiber"],"allergens":[],"substitutions":[],"prepTime":5,"cookTime":5,"ingredients":[{"item":"Rolled oats","qty":0.75,"unit":"cup","category":"Grains"}],"steps":["Step 1","Step 2"]}]}]}]}
 
-  {
-    "planTitle": "string",
-    "notes": "string",
-    "days": [
-      {
-        "day": "Monday",
-        "summary": "1-2 sentence overview tied to the user's goals/conditions/preferences",
-        "totals": {"calories": 1800, "protein": 120, "carbs": 180, "fat": 60},
-        "meals": [
-          {
-            "name": "Breakfast",
-            "items": [
-              {
-                "title": "Oatmeal with Berries",
-                "calories": 350, "protein": 20, "carbs": 55, "fat": 9,
-                "rationale": "Why this fits the user's profile.",
-                "tags": ["High-fiber"],
-                "allergens": [],
-                "substitutions": [],
-                "prepTime": 5, "cookTime": 5,
-                "ingredients": [
-                  {"item":"Rolled oats","qty":0.75,"unit":"cup","category":"Grains"},
-                  {"item":"Blueberries","qty":0.5,"unit":"cup","category":"Produce"}
-                ],
-                "steps": ["Simmer oats in milk.", "Top with berries."]
-              }
-            ]
-          }
-        ]
-      }
-    ]
-  }
+Days: ${daysList}
+Profile: Age ${i.age}, ${i.gender}, ${i.ethnicity}, goal: ${i.fitnessGoal}${i.dietaryPrefs?.length ? ', diet: '+i.dietaryPrefs.join('/') : ''}${i.exclusions ? ', exclude: '+i.exclusions : ''}${i.medicalConditions ? ', conditions: '+i.medicalConditions : ''}
 
-  Do NOT repeat any recipe titles across the week. Avoid exactly these titles: ${avoidList}.
-  Avoid these core keywords/themes across the week: ${avoidTokList}. Rotate proteins and grains; do not reuse the same main ingredient more than once.
-
-  ABSOLUTE UNIQUENESS REQUIREMENT:
-  - Every recipe (title AND core idea) must be unique for the full 7-day plan.
-  - If a candidate recipe is even *similar* to an earlier one (same main protein, same core flavour profile, or same cooking style), discard it and generate a different idea.
-  - Think "Would the user feel this is the same meal?" – if yes, it is a duplicate and must be replaced.
-
-  Rules:
-  - Output ONLY these days (inclusive, in order): ${daysList}.
-  - EVERY meal MUST have 1–2 items; each item MUST include ingredients[] and steps[].
-  - Within a day, Breakfast, Lunch, and Dinner must all be different recipes.
-  - Across days, no recipe title or near-duplicate concept may repeat.
-  - Use integers for calories/protein/carbs/fat, prepTime, cookTime (round if needed).
-  - Respect medical conditions: ${i.medicalConditions || 'None'}; exclusions: ${i.exclusions || 'None'}.
-  - Cultural background: ${i.ethnicity}; goal: ${i.fitnessGoal}; diet prefs: ${(i.dietaryPrefs||[]).join(', ') || 'None'}; age ${i.age}; gender ${i.gender}.
-  - Prefer common US grocery items; keep titles under 60 chars.
-
-  User profile (for rationale): ${JSON.stringify(profile)}`;
+Rules:
+1. Each day has 3 meals: Breakfast, Lunch, Dinner (1 item each)
+2. Each item MUST have ingredients[] and steps[]
+3. No duplicate titles. Avoid: ${avoidList}
+4. Vary proteins/grains. Avoid keywords: ${avoidTok}
+5. Use integers for macros/times
+6. Keep titles <60 chars`;
     }
 
     // ---------- JSON helpers ----------
@@ -333,6 +287,20 @@
           return "";
         }
         
+        // Log token usage metadata if present
+        if (obj.usageMetadata) {
+          console.log("[getFirstPartText] Token usage:", {
+            promptTokenCount: obj.usageMetadata.promptTokenCount,
+            candidatesTokenCount: obj.usageMetadata.candidatesTokenCount,
+            totalTokenCount: obj.usageMetadata.totalTokenCount
+          });
+          
+          // Warn if approaching token limits (most models have ~8192 token context window)
+          if (obj.usageMetadata.totalTokenCount > 7000) {
+            console.warn("[getFirstPartText] Token count is high:", obj.usageMetadata.totalTokenCount, "- May be approaching model limits");
+          }
+        }
+        
         // Check for blocked content or other safety issues
         if (obj.promptFeedback) {
           console.warn("[getFirstPartText] Prompt feedback present:", obj.promptFeedback);
@@ -359,6 +327,13 @@
         // Check for finish reason
         if (candidate.finishReason) {
           console.log("[getFirstPartText] Finish reason:", candidate.finishReason);
+          
+          // Handle MAX_TOKENS finish reason
+          if (candidate.finishReason === "MAX_TOKENS") {
+            console.error("[getFirstPartText] Generation hit MAX_TOKENS limit - output is incomplete");
+            throw new Error(`MAX_TOKENS: Response truncated due to token limit. Try reducing prompt complexity or maxOutputTokens.`);
+          }
+          
           if (candidate.finishReason === "SAFETY" || candidate.finishReason === "RECITATION") {
             console.error("[getFirstPartText] Generation stopped due to:", candidate.finishReason);
             throw new Error(`Generation stopped: ${candidate.finishReason}`);
@@ -402,8 +377,8 @@
         return "";
       } catch (e) {
         console.error("[getFirstPartText] Exception:", e);
-        // Re-throw errors about blocked content so they can be shown to user
-        if (e.message && (e.message.includes("blocked") || e.message.includes("SAFETY"))) {
+        // Re-throw errors about blocked content, MAX_TOKENS, or SAFETY so they can be shown to user
+        if (e.message && (e.message.includes("blocked") || e.message.includes("SAFETY") || e.message.includes("MAX_TOKENS"))) {
           throw e;
         }
         return "";
@@ -428,16 +403,14 @@
       try {
         console.log("[repairPlan] Attempting to repair plan");
         const repairPrompt =
-          `Fix this JSON so EVERY meal has at least 1 item with {title, calories, protein, carbs, fat} (integers), and each item has non-empty ingredients[] and steps[]. ` +
-          `Keep the same days and meal names. Respect medical conditions/exclusions/culture/goal from context. ` +
-          `Return JSON ONLY in the same schema.\n\nContext: ${JSON.stringify(inputs)}\n\nCurrent JSON:\n${JSON.stringify(plan)}`;
+          `Fix JSON: Add missing ingredients[] and steps[] to all items. Keep same structure. Return JSON ONLY.\n\nProfile: ${JSON.stringify(inputs)}\n\nJSON:\n${JSON.stringify(plan)}`;
 
         const fixRes = await secureApiCall("generate-plan", {
           endpoint: "gemini-2.5-flash:generateContent",
           body: {
             contents: [{ parts: [{ text: repairPrompt }] }],
             generationConfig: {
-              maxOutputTokens: 2000,
+              maxOutputTokens: 1200,  // Reduced from 2000
               temperature: 0.3,
               topP: 0.95,
               topK: 40
@@ -646,29 +619,23 @@
     async function fillMissingMealsForDay(dayName, missingNames, usedTitles, usedTokens, inputs, allPreviousItems = []) {
       if (!missingNames || !missingNames.length) return [];
       
-      const avoidTitles = Array.from(usedTitles).slice(0, 200).join(', ');
-      const avoidTok = Array.from(usedTokens).slice(0, 200).join(', ');
+      // Limit avoid lists to prevent prompt from being too long
+      const avoidTitles = Array.from(usedTitles).slice(0, 25).join(', ');
+      const avoidTok = Array.from(usedTokens).slice(0, 35).join(', ');
       
-      // Create a more detailed prompt that emphasizes uniqueness
-      const prompt = `Return STRICT JSON ONLY with this schema: {"meals":[{"name":"Breakfast|Lunch|Dinner","items":[{"title":"","calories":350,"protein":20,"carbs":55,"fat":9,"rationale":"","tags":[],"allergens":[],"substitutions":[],"prepTime":5,"cookTime":5,"ingredients":[{"item":"","qty":0.5,"unit":"","category":""}],"steps":["..."]}]}]}.
+      // Simplified prompt for token efficiency
+      const prompt = `JSON ONLY. Schema: {"meals":[{"name":"Breakfast","items":[{"title":"","calories":350,"protein":20,"carbs":55,"fat":9,"rationale":"","tags":[],"allergens":[],"substitutions":[],"prepTime":5,"cookTime":5,"ingredients":[{"item":"","qty":0.5,"unit":"","category":""}],"steps":["..."]}]}]}
 
-Create ABSOLUTELY UNIQUE recipes ONLY for these meals on ${dayName}: ${missingNames.join(', ')}.
-These recipes MUST be completely different from any other recipe in the 7-day plan.
-
-Avoid these exact titles: ${avoidTitles || 'none'}.
-Avoid these core keywords/themes: ${avoidTok || 'none'}.
-
-UNIQUENESS REQUIREMENTS:
-1. Use different main proteins, cooking methods, and flavor profiles than ALL other recipes in the plan
-2. Ensure the recipe concept is not similar to any existing recipe
-3. Each recipe must have a distinctive character and not feel like a variation of another dish
-
-User profile: ${JSON.stringify(inputs)}`;
+Create UNIQUE recipes for ${dayName}: ${missingNames.join(', ')}
+Profile: ${JSON.stringify(inputs)}
+Avoid titles: ${avoidTitles || 'none'}
+Avoid keywords: ${avoidTok || 'none'}
+Use different proteins/methods than existing recipes.`;
 
       const body = { 
         contents: [{ parts: [{ text: prompt }] }], 
         generationConfig: {
-          maxOutputTokens: 1800, 
+          maxOutputTokens: 1000,  // Reduced from 1800
           temperature: 0.7,
           topP: 0.95,
           topK: 40
@@ -887,15 +854,15 @@ User profile: ${JSON.stringify(inputs)}`;
           async function tryOnce(maxTokens, temperature, attempt = 1) {
             try {
               const prompt = buildJsonPromptRange(lastInputs, [dayName], 
-                Array.from(usedTitles).slice(0, 100), 
-                Array.from(usedTokens).slice(0, 150));
+                Array.from(usedTitles).slice(0, 30),  // Reduced from 100 to 30
+                Array.from(usedTokens).slice(0, 40));  // Reduced from 150 to 40
               
               // Log prompt size for debugging
               const promptLength = prompt.length;
-              console.log(`[generateDay] Attempt ${attempt} for ${dayName} - prompt length: ${promptLength} chars, tokens: ${maxTokens}, temp: ${temperature}`);
+              console.log(`[generateDay] Attempt ${attempt} for ${dayName} - prompt length: ${promptLength} chars, maxTokens: ${maxTokens}, temp: ${temperature}`);
               
-              if (promptLength > 20000) {
-                console.warn(`[generateDay] Prompt is very long (${promptLength} chars), this might cause issues`);
+              if (promptLength > 2500) {
+                console.warn(`[generateDay] Prompt is long (${promptLength} chars), reducing complexity may help avoid token limits`);
               }
               
               const body = {
@@ -903,9 +870,7 @@ User profile: ${JSON.stringify(inputs)}`;
                 generationConfig: {
                   maxOutputTokens: maxTokens,
                   temperature,
-                  // Add topP for better control over randomness
                   topP: 0.95,
-                  // Add topK for diversity
                   topK: 40
                 }
               };
@@ -943,6 +908,8 @@ User profile: ${JSON.stringify(inputs)}`;
               if (!partPlan || !Array.isArray(partPlan.days)) {
                 console.warn(`[generateDay] Failed to parse JSON for ${dayName}`);
                 console.log(`[generateDay] Raw text (first 400 chars):`, String(text).slice(0,400));
+                // Log full raw text for debugging when parsing fails
+                console.log(`[generateDay] Full raw text:`, text);
                 return null;
               }
               if (needsRepair(partPlan)) {
@@ -951,19 +918,28 @@ User profile: ${JSON.stringify(inputs)}`;
               }
               return partPlan;
             } catch (err) {
-              // If content was blocked or there's a safety issue, propagate the error
-              if (err.message && (err.message.includes("blocked") || err.message.includes("SAFETY"))) {
-                throw err;
+              // If content was blocked, there's a safety issue, or MAX_TOKENS hit, propagate the error
+              if (err.message && (err.message.includes("blocked") || err.message.includes("SAFETY") || err.message.includes("MAX_TOKENS"))) {
+                console.error(`[generateDay] ${dayName} hit ${err.message} on attempt ${attempt}`);
+                
+                // For MAX_TOKENS, we can retry with lower token count
+                if (err.message.includes("MAX_TOKENS")) {
+                  console.log(`[generateDay] Will retry ${dayName} with lower maxOutputTokens`);
+                  return null; // Allow retry with lower tokens
+                }
+                
+                throw err; // For SAFETY/blocked, throw immediately
               }
               console.error(`[generateDay] Error in attempt ${attempt} for ${dayName}:`, err);
               return null;
             }
           }
 
-          // Try with higher token budget, then retry with smaller budgets
-          let planPart = await tryOnce(2200, 0.7, 1);
-          if (!planPart) planPart = await tryOnce(1600, 0.4, 2);
-          if (!planPart) planPart = await tryOnce(1400, 0.3, 3);
+          // Try with progressively lower token budgets to stay within limits
+          // Most Gemini models have ~8K token context (prompt + output combined)
+          let planPart = await tryOnce(1200, 0.7, 1);  // Reduced from 2200
+          if (!planPart) planPart = await tryOnce(900, 0.5, 2);  // Reduced from 1600
+          if (!planPart) planPart = await tryOnce(700, 0.3, 3);  // Reduced from 1400
           return planPart;
         }
 
@@ -1360,35 +1336,15 @@ User profile: ${JSON.stringify(inputs)}`;
         // Show a small loader
         showMessage("Regenerating meal...", 10000);
 
-        // Build a prompt for just this meal
-        const prompt = `Generate a single unique recipe for ${mealName} on ${day.day || `Day ${dayIdx+1}`}.
-        
-This must be COMPLETELY DIFFERENT from all existing recipes in the plan. Avoid these titles: ${Array.from(usedTitles).join(", ")}.
-Avoid these core ingredients/themes: ${Array.from(usedTokens).join(", ")}.
+        // Build a simplified prompt for just this meal
+        const prompt = `JSON ONLY. Schema:
+{"title":"Recipe Name","calories":350,"protein":20,"carbs":55,"fat":9,"rationale":"Brief reason","tags":["High-fiber"],"allergens":[],"substitutions":[],"prepTime":5,"cookTime":5,"ingredients":[{"item":"Ingredient","qty":0.75,"unit":"cup","category":"Grains"}],"steps":["Step 1"]}
 
-ABSOLUTE UNIQUENESS REQUIREMENT:
-- The recipe must not share main ingredients, cooking methods, or flavor profiles with any other recipe in the plan
-- It should feel like a completely different dish, not just a variation of another meal
-- Use different cuisines, cooking techniques, or meal formats to ensure variety
-
-Return STRICT JSON ONLY with this schema:
-{
-  "title": "Recipe Name",
-  "calories": 350, "protein": 20, "carbs": 55, "fat": 9,
-  "rationale": "Why this fits the user's profile.",
-  "tags": ["High-fiber"],
-  "allergens": [],
-  "substitutions": [],
-  "prepTime": 5, "cookTime": 5,
-  "ingredients": [
-    {"item":"Ingredient 1","qty":0.75,"unit":"cup","category":"Grains"},
-    {"item":"Ingredient 2","qty":0.5,"unit":"cup","category":"Produce"}
-  ],
-  "steps": ["Step 1", "Step 2"]
-}
-
-User profile: ${JSON.stringify(lastInputs)}
-Meal to replace: ${mealName} on ${day.day || `Day ${dayIdx+1}`}`;
+Generate 1 UNIQUE recipe for ${mealName} on ${day.day || `Day ${dayIdx+1}`}.
+Profile: ${JSON.stringify(lastInputs)}
+Must differ from: ${Array.from(usedTitles).slice(0, 25).join(", ")}
+Avoid: ${Array.from(usedTokens).slice(0, 35).join(", ")}
+Use different proteins/methods/cuisines.`;
 
         // Call the API
         const resp = await secureApiCall("generate-plan", {
@@ -1396,7 +1352,7 @@ Meal to replace: ${mealName} on ${day.day || `Day ${dayIdx+1}`}`;
           body: {
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: {
-              maxOutputTokens: 1500,
+              maxOutputTokens: 800,  // Reduced from 1500
               temperature: 0.7,
               topP: 0.95,
               topK: 40
@@ -1438,9 +1394,9 @@ Meal to replace: ${mealName} on ${day.day || `Day ${dayIdx+1}`}`;
           const retryResp = await secureApiCall("generate-plan", {
             endpoint: "gemini-2.5-flash:generateContent",
             body: {
-              contents: [{ parts: [{ text: prompt + "\n\nIMPORTANT: Previous attempt was too similar to existing recipes. Make this COMPLETELY DIFFERENT in ingredients, cooking style, and overall concept." }] }],
+              contents: [{ parts: [{ text: prompt + "\n\nIMPORTANT: Make this COMPLETELY DIFFERENT." }] }],
               generationConfig: {
-                maxOutputTokens: 1500,
+                maxOutputTokens: 800,  // Reduced from 1500
                 temperature: 0.9, // Higher temperature for more creativity
                 topP: 0.95,
                 topK: 40
