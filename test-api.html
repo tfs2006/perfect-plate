@@ -136,11 +136,33 @@
 
     function extractText(response) {
       try {
+        // Log token usage if present (consistent format with backend)
+        if (response.usageMetadata) {
+          console.log("Token usage:", {
+            promptTokenCount: response.usageMetadata.promptTokenCount,
+            candidatesTokenCount: response.usageMetadata.candidatesTokenCount,
+            totalTokenCount: response.usageMetadata.totalTokenCount
+          });
+        }
+        
         if (!response.candidates || response.candidates.length === 0) {
           return { success: false, message: "No candidates in response" };
         }
         
         const candidate = response.candidates[0];
+        
+        // Check finish reason
+        if (candidate.finishReason) {
+          console.log("Finish reason:", candidate.finishReason);
+          if (candidate.finishReason === "MAX_TOKENS") {
+            return { 
+              success: false, 
+              message: "MAX_TOKENS: Response truncated due to token limit. Try reducing prompt complexity or maxOutputTokens.",
+              tokenInfo: response.usageMetadata 
+            };
+          }
+        }
+        
         if (!candidate.content || !candidate.content.parts) {
           return { success: false, message: "No content.parts in candidate" };
         }
@@ -148,7 +170,11 @@
         const parts = candidate.content.parts;
         for (const part of parts) {
           if (part.text) {
-            return { success: true, text: part.text };
+            return { 
+              success: true, 
+              text: part.text,
+              tokenInfo: response.usageMetadata 
+            };
           }
         }
         
@@ -171,9 +197,17 @@
         
         const result = extractText(response);
         if (result.success) {
-          showResult('simple-result', 'success', `✅ Success! Received text: "${result.text}"`, response);
+          let message = `✅ Success! Received text: "${result.text}"`;
+          if (result.tokenInfo) {
+            message += `\n\nToken usage: ${result.tokenInfo.totalTokenCount} total (${result.tokenInfo.promptTokenCount} prompt + ${result.tokenInfo.candidatesTokenCount} response)`;
+          }
+          showResult('simple-result', 'success', message, response);
         } else {
-          showResult('simple-result', 'error', `❌ Failed: ${result.message}`, response);
+          let message = `❌ Failed: ${result.message}`;
+          if (result.tokenInfo) {
+            message += `\n\nToken usage: ${result.tokenInfo.totalTokenCount} total`;
+          }
+          showResult('simple-result', 'error', message, response);
         }
       } catch (e) {
         showResult('simple-result', 'error', `❌ Error: ${e.message}`);
@@ -248,7 +282,7 @@ Generate one day (Monday) with breakfast only for a 30-year-old male seeking wei
       try {
         const response = await callAPI('gemini-2.5-flash:generateContent', {
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 1500, temperature: 0.5 }
+          generationConfig: { maxOutputTokens: 1200, temperature: 0.5 }
         });
         
         const result = extractText(response);
@@ -256,12 +290,20 @@ Generate one day (Monday) with breakfast only for a 30-year-old male seeking wei
           try {
             const text = result.text.replace(/```json\n?/g, '').replace(/```/g, '').trim();
             const json = JSON.parse(text);
-            showResult('meal-result', 'success', `✅ Success! Generated meal plan`, { response, parsed: json });
+            let message = `✅ Success! Generated meal plan`;
+            if (result.tokenInfo) {
+              message += `\n\nToken usage: ${result.tokenInfo.totalTokenCount} total (${result.tokenInfo.promptTokenCount} prompt + ${result.tokenInfo.candidatesTokenCount} response)`;
+            }
+            showResult('meal-result', 'success', message, { response, parsed: json });
           } catch (e) {
             showResult('meal-result', 'warning', `⚠️ Got text but failed to parse JSON: ${e.message}. Text (first 500 chars): ${result.text.substring(0, 500)}`, response);
           }
         } else {
-          showResult('meal-result', 'error', `❌ Failed: ${result.message}`, response);
+          let message = `❌ Failed: ${result.message}`;
+          if (result.tokenInfo) {
+            message += `\n\nToken usage: ${result.tokenInfo.totalTokenCount} total`;
+          }
+          showResult('meal-result', 'error', message, response);
         }
       } catch (e) {
         showResult('meal-result', 'error', `❌ Error: ${e.message}`);

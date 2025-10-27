@@ -54,7 +54,27 @@ exports.handler = async (event) => {
       const hasCandidates = Array.isArray(parsed.candidates) && parsed.candidates.length > 0;
       const hasParts = hasCandidates && Array.isArray(parsed.candidates[0]?.content?.parts);
       const hasText = hasParts && parsed.candidates[0].content.parts.some(p => p.text);
-      console.log("[Gemini Proxy] Response structure - candidates:", hasCandidates, "parts:", hasParts, "hasText:", hasText);
+      const finishReason = hasCandidates ? parsed.candidates[0]?.finishReason : null;
+      
+      console.log("[Gemini Proxy] Response structure - candidates:", hasCandidates, "parts:", hasParts, "hasText:", hasText, "finishReason:", finishReason);
+      
+      // Log token usage if present
+      if (parsed.usageMetadata) {
+        console.log("[Gemini Proxy] Token usage:", {
+          promptTokenCount: parsed.usageMetadata.promptTokenCount,
+          candidatesTokenCount: parsed.usageMetadata.candidatesTokenCount,
+          totalTokenCount: parsed.usageMetadata.totalTokenCount
+        });
+        
+        // Warn if hitting token limits
+        if (finishReason === "MAX_TOKENS") {
+          console.error("[Gemini Proxy] Response hit MAX_TOKENS - output is incomplete!");
+        }
+        
+        if (parsed.usageMetadata.totalTokenCount > 7000) {
+          console.warn("[Gemini Proxy] Total token count is high:", parsed.usageMetadata.totalTokenCount);
+        }
+      }
       
       if (!hasText && hasCandidates) {
         console.warn("[Gemini Proxy] Response has candidates but no text content. Full response:", JSON.stringify(parsed, null, 2));
