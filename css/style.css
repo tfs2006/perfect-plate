@@ -14,7 +14,9 @@ body { font-family: 'Inter', sans-serif; background-color: #f7fafc; }
 
 /* Cards */
 .checkbox-card { transition: all .2s ease; }
-.checkbox-card input:checked + * { border-color:#059669; background:#ecfdf5; color:#047857; }
+.checkbox-card:has(input:checked) { border-color:#059669; background:#ecfdf5; color:#047857; }
+/* Fallback for browsers without :has() support */
+.checkbox-card input:checked + span { color:#047857; }
 
 /* Loader overlay: MUST start hidden or it blocks clicks */
 .loader-container {

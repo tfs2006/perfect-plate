@@ -122,6 +122,29 @@
     $("back-3")?.addEventListener("click", () => goToStep(2));
     goToStep(1);
 
+    // ---------- Checkbox Cards ----------
+    // Add visual feedback for checkbox cards (for browsers without :has() support)
+    document.querySelectorAll('.checkbox-card input[type="checkbox"]').forEach(checkbox => {
+      const updateCardStyle = () => {
+        const label = checkbox.closest('.checkbox-card');
+        if (label) {
+          if (checkbox.checked) {
+            label.style.borderColor = '#059669';
+            label.style.backgroundColor = '#ecfdf5';
+            label.style.color = '#047857';
+          } else {
+            label.style.borderColor = '';
+            label.style.backgroundColor = '';
+            label.style.color = '';
+          }
+        }
+      };
+      // Initialize on page load
+      updateCardStyle();
+      // Update on change
+      checkbox.addEventListener('change', updateCardStyle);
+    });
+
     // ---------- Toast ----------
     function showMessage(msg, ms = 4000) {
       if (!messageBox || !messageText) { alert(msg); return; }
