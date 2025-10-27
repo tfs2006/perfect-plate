@@ -116,11 +116,46 @@
     window.nextStep = (i) => goToStep(Number(i));
     window.prevStep = (i) => goToStep(Number(i));
 
-    $("next-1")?.addEventListener("click", () => goToStep(2));
+    $("next-1")?.addEventListener("click", () => {
+      // Validate step 1 fields before proceeding
+      const age = $("age");
+      const gender = $("gender");
+      const ethnicity = $("ethnicity");
+      
+      if (!age?.value || !gender?.value || !ethnicity?.value) {
+        showMessage("Please complete all fields in Step 1 before proceeding.");
+        return;
+      }
+      
+      goToStep(2);
+    });
     $("back-2")?.addEventListener("click", () => goToStep(1));
     $("next-2")?.addEventListener("click", () => goToStep(3));
     $("back-3")?.addEventListener("click", () => goToStep(2));
     goToStep(1);
+
+    // ---------- Checkbox Cards ----------
+    // Add visual feedback for checkbox cards (for browsers without :has() support)
+    document.querySelectorAll('.checkbox-card input[type="checkbox"]').forEach(checkbox => {
+      const updateCardStyle = () => {
+        const label = checkbox.closest('.checkbox-card');
+        if (label) {
+          if (checkbox.checked) {
+            label.style.borderColor = '#059669';
+            label.style.backgroundColor = '#ecfdf5';
+            label.style.color = '#047857';
+          } else {
+            label.style.borderColor = '';
+            label.style.backgroundColor = '';
+            label.style.color = '';
+          }
+        }
+      };
+      // Initialize on page load
+      updateCardStyle();
+      // Update on change
+      checkbox.addEventListener('change', updateCardStyle);
+    });
 
     // ---------- Toast ----------
     function showMessage(msg, ms = 4000) {
@@ -1070,6 +1105,9 @@ User profile: ${JSON.stringify(inputs)}`;
       // Bind regenerate buttons
       document.querySelectorAll('.regen-btn').forEach(btn => 
         btn.addEventListener('click', onRegenClick));
+      
+      // Re-initialize icons for dynamically added content
+      initIcons();
     }
 
     function activateTab(id) {
@@ -1319,6 +1357,8 @@ Meal to replace: ${mealName} on ${day.day || `Day ${dayIdx+1}`}`;
           // Rebind regenerate buttons
           tabPanel.querySelectorAll('.regen-btn').forEach(btn => 
             btn.addEventListener('click', onRegenClick));
+          // Re-initialize icons
+          initIcons();
         }
 
         showMessage(`${mealName} regenerated successfully!`);
