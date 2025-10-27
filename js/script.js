@@ -780,7 +780,7 @@ User profile: ${JSON.stringify(inputs)}`;
         const allPreviousItems = []; // Track all previously generated items for similarity checks
 
         async function generateDay(dayName) {
-          async function tryOnce(maxTokens, temperature, useSchema = true) {
+          async function tryOnce(maxTokens, temperature) {
             const prompt = buildJsonPromptRange(lastInputs, [dayName], 
               Array.from(usedTitles).slice(0, 100), 
               Array.from(usedTokens).slice(0, 150));
@@ -791,78 +791,6 @@ User profile: ${JSON.stringify(inputs)}`;
                 temperature,
               }
             };
-            if (useSchema) {
-              body.generationConfig.response_schema = {
-                type: "object",
-                properties: {
-                  planTitle: { type: "string" },
-                  notes: { type: "string" },
-                  days: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        day: { type: "string" },
-                        summary: { type: "string" },
-                        totals: {
-                          type: "object",
-                          properties: {
-                            calories: { type: "number" },
-                            protein:  { type: "number" },
-                            carbs:    { type: "number" },
-                            fat:      { type: "number" }
-                          }
-                        },
-                        meals: {
-                          type: "array",
-                          items: {
-                            type: "object",
-                            properties: {
-                              name: { type: "string" },
-                              items: {
-                                type: "array",
-                                items: {
-                                  type: "object",
-                                  properties: {
-                                    title:   { type: "string" },
-                                    calories:{ type: "number" },
-                                    protein: { type: "number" },
-                                    carbs:   { type: "number" },
-                                    fat:     { type: "number" },
-                                    rationale:{ type: "string" },
-                                    tags:    { type: "array", items: { type: "string" } },
-                                    allergens:{ type: "array", items: { type: "string" } },
-                                    substitutions:{ type: "array", items: { type: "string" } },
-                                    prepTime:{ type: "number" },
-                                    cookTime:{ type: "number" },
-                                    ingredients: {
-                                      type: "array",
-                                      items: {
-                                        type: "object",
-                                        properties: {
-                                          item: { type: "string" },
-                                          qty:  { type: "number" },
-                                          unit: { type: "string" },
-                                          category: { type: "string" }
-                                        }
-                                      }
-                                    },
-                                    steps: { type: "array", items: { type: "string" } }
-                                  },
-                                  required: ["title","calories","protein","carbs","fat","ingredients","steps"]
-                                }
-                              }
-                            }
-                          }
-                        }
-                      },
-                      required: ["day","meals"]
-                    }
-                  }
-                },
-                required: ["days"]
-              };
-            }
 
             const resp = await secureApiCall("generate-plan", {
               endpoint: "gemini-1.5-flash:generateContent",
@@ -886,10 +814,10 @@ User profile: ${JSON.stringify(inputs)}`;
             return partPlan;
           }
 
-          // Try with schema + higher token budget, then retry with smaller budget, then without schema
-          let planPart = await tryOnce(2200, 0.7, true);
-          if (!planPart) planPart = await tryOnce(1600, 0.4, true);
-          if (!planPart) planPart = await tryOnce(1400, 0.3, false);
+          // Try with higher token budget, then retry with smaller budgets
+          let planPart = await tryOnce(2200, 0.7);
+          if (!planPart) planPart = await tryOnce(1600, 0.4);
+          if (!planPart) planPart = await tryOnce(1400, 0.3);
           return planPart;
         }
 
