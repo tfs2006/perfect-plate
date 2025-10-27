@@ -33,7 +33,7 @@ exports.handler = async (event) => {
       return { statusCode: 500, headers: cors, body: JSON.stringify({ error: "GEMINI_API_KEY not configured" }) };
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${endpoint}?key=${key}`;
+    const url = `https://generativelanguage.googleapis.com/v1/models/${endpoint}?key=${key}`;
     const resp = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const text = await resp.text();
 
