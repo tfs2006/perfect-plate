@@ -898,6 +898,7 @@ User profile: ${JSON.stringify(inputs)}`;
 
         // Generate days sequentially to ensure stability and clearer error boundaries
         const daysOut = [];
+        const dayErrors = []; // Track errors for better diagnostics
         for (let i = 0; i < DAYS.length; i++) {
           const day = DAYS[i];
           if (loaderText) loaderText.textContent = `Creating your plan… ${i+1}/7 (${day})`;
@@ -957,15 +958,26 @@ User profile: ${JSON.stringify(inputs)}`;
               
               daysOut.push(processedDay);
             } else {
-              console.warn("No valid plan for", day);
+              const errMsg = `Failed to generate valid plan for ${day}`;
+              console.warn(errMsg);
+              dayErrors.push(errMsg);
             }
           } catch (e) {
-            console.warn("Error generating", day, e);
+            const errMsg = `Error generating ${day}: ${e.message || e.name || e.toString()}`;
+            console.warn(errMsg, e);
+            dayErrors.push(errMsg);
           }
         }
 
         if (!daysOut.length) {
-          throw new Error("Plan format invalid.");
+          // Provide more specific error message based on what failed
+          if (dayErrors.length > 0) {
+            const errorSummary = dayErrors.slice(0, 3).join('; ');
+            const moreErrorsText = dayErrors.length > 3 ? ` (and ${dayErrors.length - 3} more errors)` : '';
+            throw new Error(`Failed to generate any days. ${errorSummary}${moreErrorsText}. Check console for details.`);
+          } else {
+            throw new Error("Failed to generate meal plan. The API may be unavailable or returned invalid data. Please check your API configuration and try again.");
+          }
         }
 
         let plan = {
@@ -1045,7 +1057,12 @@ User profile: ${JSON.stringify(inputs)}`;
 
       const tabs = $("result-tabs");
       const content = $("tab-content");
-      if (!plan || !Array.isArray(plan.days)) throw new Error("Plan format invalid.");
+      if (!plan || !Array.isArray(plan.days)) {
+        throw new Error("Invalid meal plan structure. The generated plan is missing required data. Please try again.");
+      }
+      if (plan.days.length === 0) {
+        throw new Error("Generated plan has no days. Please try creating your plan again.");
+      }
       if (tabs) tabs.innerHTML = "";
       if (content) content.innerHTML = "";
 
