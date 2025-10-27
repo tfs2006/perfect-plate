@@ -796,61 +796,61 @@ User profile: ${JSON.stringify(inputs)}`;
             };
             if (useSchema) {
               body.generationConfig.response_schema = {
-                type: "OBJECT",
+                type: "object",
                 properties: {
-                  planTitle: { type: "STRING" },
-                  notes: { type: "STRING" },
+                  planTitle: { type: "string" },
+                  notes: { type: "string" },
                   days: {
-                    type: "ARRAY",
+                    type: "array",
                     items: {
-                      type: "OBJECT",
+                      type: "object",
                       properties: {
-                        day: { type: "STRING" },
-                        summary: { type: "STRING" },
+                        day: { type: "string" },
+                        summary: { type: "string" },
                         totals: {
-                          type: "OBJECT",
+                          type: "object",
                           properties: {
-                            calories: { type: "NUMBER" },
-                            protein:  { type: "NUMBER" },
-                            carbs:    { type: "NUMBER" },
-                            fat:      { type: "NUMBER" }
+                            calories: { type: "number" },
+                            protein:  { type: "number" },
+                            carbs:    { type: "number" },
+                            fat:      { type: "number" }
                           }
                         },
                         meals: {
-                          type: "ARRAY",
+                          type: "array",
                           items: {
-                            type: "OBJECT",
+                            type: "object",
                             properties: {
-                              name: { type: "STRING" },
+                              name: { type: "string" },
                               items: {
-                                type: "ARRAY",
+                                type: "array",
                                 items: {
-                                  type: "OBJECT",
+                                  type: "object",
                                   properties: {
-                                    title:   { type: "STRING" },
-                                    calories:{ type: "NUMBER" },
-                                    protein: { type: "NUMBER" },
-                                    carbs:   { type: "NUMBER" },
-                                    fat:     { type: "NUMBER" },
-                                    rationale:{ type: "STRING" },
-                                    tags:    { type: "ARRAY", items: { type: "STRING" } },
-                                    allergens:{ type: "ARRAY", items: { type: "STRING" } },
-                                    substitutions:{ type: "ARRAY", items: { type: "STRING" } },
-                                    prepTime:{ type: "NUMBER" },
-                                    cookTime:{ type: "NUMBER" },
+                                    title:   { type: "string" },
+                                    calories:{ type: "number" },
+                                    protein: { type: "number" },
+                                    carbs:   { type: "number" },
+                                    fat:     { type: "number" },
+                                    rationale:{ type: "string" },
+                                    tags:    { type: "array", items: { type: "string" } },
+                                    allergens:{ type: "array", items: { type: "string" } },
+                                    substitutions:{ type: "array", items: { type: "string" } },
+                                    prepTime:{ type: "number" },
+                                    cookTime:{ type: "number" },
                                     ingredients: {
-                                      type: "ARRAY",
+                                      type: "array",
                                       items: {
-                                        type: "OBJECT",
+                                        type: "object",
                                         properties: {
-                                          item: { type: "STRING" },
-                                          qty:  { type: "NUMBER" },
-                                          unit: { type: "STRING" },
-                                          category: { type: "STRING" }
+                                          item: { type: "string" },
+                                          qty:  { type: "number" },
+                                          unit: { type: "string" },
+                                          category: { type: "string" }
                                         }
                                       }
                                     },
-                                    steps: { type: "ARRAY", items: { type: "STRING" } }
+                                    steps: { type: "array", items: { type: "string" } }
                                   },
                                   required: ["title","calories","protein","carbs","fat","ingredients","steps"]
                                 }
