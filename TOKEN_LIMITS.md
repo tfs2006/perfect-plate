@@ -7,7 +7,7 @@ This document explains the token limits for Gemini API models and how the Perfec
 ## Token Limits
 
 Most Gemini models have the following limits:
-- **Context window**: ~8,192 tokens (combined prompt + response)
+- **Context window**: 8,192 tokens for gemini-1.5-flash and gemini-2.5-flash; 32,768 tokens for gemini-1.5-pro (combined prompt + response)
 - **Input (prompt)**: Variable, but typically up to 7,000+ tokens
 - **Output (response)**: Limited by `maxOutputTokens` parameter
 

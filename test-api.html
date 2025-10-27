@@ -136,9 +136,13 @@
 
     function extractText(response) {
       try {
-        // Log token usage if present
+        // Log token usage if present (consistent format with backend)
         if (response.usageMetadata) {
-          console.log("Token usage:", response.usageMetadata);
+          console.log("Token usage:", {
+            promptTokenCount: response.usageMetadata.promptTokenCount,
+            candidatesTokenCount: response.usageMetadata.candidatesTokenCount,
+            totalTokenCount: response.usageMetadata.totalTokenCount
+          });
         }
         
         if (!response.candidates || response.candidates.length === 0) {
@@ -153,7 +157,7 @@
           if (candidate.finishReason === "MAX_TOKENS") {
             return { 
               success: false, 
-              message: "MAX_TOKENS: Response truncated due to token limit",
+              message: "MAX_TOKENS: Response truncated due to token limit. Try reducing prompt complexity or maxOutputTokens.",
               tokenInfo: response.usageMetadata 
             };
           }
