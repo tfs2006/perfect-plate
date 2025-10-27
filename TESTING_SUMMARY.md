@@ -31,8 +31,11 @@ Comprehensive testing of all features and buttons to ensure the site works prope
 
 ### ✅ Checkbox Card Visual Feedback
 **Issue Found and Fixed:**
-- Original CSS selector `.checkbox-card input:checked + *` didn't work because checkbox was followed by text node, not an element
-- **Solution**: Wrapped text in `<span>` elements and added JavaScript fallback for browsers without `:has()` support
+- Original CSS selector `.checkbox-card input:checked + *` didn't work because the checkbox was followed by text node, not an element
+- **Solution**: 
+  1. Wrapped text in `<span>` elements
+  2. Updated CSS to use `.checkbox-card:has(input:checked)` with `.checkbox-card input:checked + span` as fallback
+  3. Added JavaScript handler for browsers without `:has()` support
 - **Result**: Checkbox cards now properly show visual feedback when selected (green border, light green background)
 
 ### ✅ Form Persistence
@@ -99,11 +102,11 @@ All buttons tested and working:
 - Screen reader friendly markup
 
 ## Browser Compatibility
-- Modern browser features used with fallbacks:
-  - CSS `:has()` selector with JavaScript fallback
+- Modern browser features used with graceful degradation:
+  - CSS `:has()` selector with JavaScript fallback for older browsers
   - localStorage with try-catch error handling
-  - Optional chaining (?.) for safe property access
-  - Nullish coalescing (??) for default values
+  - Optional chaining (?.) for safe property access (used throughout for code safety)
+  - Nullish coalescing (??) for default values (used throughout for code safety)
 
 ## Performance
 - Debounced form input handling (300ms) for localStorage saves
