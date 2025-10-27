@@ -357,7 +357,6 @@
         endpoint: "gemini-1.5-flash:generateContent",
         body: {
           contents: [{ parts: [{ text: repairPrompt }] }],
-          generationConfig: { response_mime_type: "application/json" }
         }
       });
       const raw = fixRes?.candidates?.[0]?.content?.parts?.[0]?.text || "";
@@ -566,8 +565,7 @@ User profile: ${JSON.stringify(inputs)}`;
 
       const body = { 
         contents: [{ parts: [{ text: prompt }] }], 
-        generationConfig: { 
-          response_mime_type: 'application/json', 
+        generationConfig: {
           maxOutputTokens: 1800, 
           temperature: 0.7 
         } 
@@ -791,7 +789,6 @@ User profile: ${JSON.stringify(inputs)}`;
               generationConfig: {
                 maxOutputTokens: maxTokens,
                 temperature,
-                response_mime_type: "application/json",
               }
             };
             if (useSchema) {
@@ -1300,7 +1297,6 @@ Meal to replace: ${mealName} on ${day.day || `Day ${dayIdx+1}`}`;
             generationConfig: {
               maxOutputTokens: 1500,
               temperature: 0.7,
-              response_mime_type: "application/json"
             }
           }
         });
@@ -1343,7 +1339,6 @@ Meal to replace: ${mealName} on ${day.day || `Day ${dayIdx+1}`}`;
               generationConfig: {
                 maxOutputTokens: 1500,
                 temperature: 0.9, // Higher temperature for more creativity
-                response_mime_type: "application/json"
               }
             }
           });
