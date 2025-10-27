@@ -354,7 +354,7 @@
         `Return JSON ONLY in the same schema.\n\nContext: ${JSON.stringify(inputs)}\n\nCurrent JSON:\n${JSON.stringify(plan)}`;
 
       const fixRes = await secureApiCall("generate-plan", {
-        endpoint: "gemini-1.5-flash:generateContent",
+        endpoint: "gemini-2.5-flash:generateContent",
         body: {
           contents: [{ parts: [{ text: repairPrompt }] }],
         }
@@ -571,7 +571,7 @@ User profile: ${JSON.stringify(inputs)}`;
         } 
       };
       
-      const resp = await secureApiCall('generate-plan', { endpoint: 'gemini-1.5-flash:generateContent', body });
+      const resp = await secureApiCall('generate-plan', { endpoint: 'gemini-2.5-flash:generateContent', body });
       const text = getFirstPartText(resp);
       const obj = extractFirstJSON(text);
       
@@ -793,7 +793,7 @@ User profile: ${JSON.stringify(inputs)}`;
             };
 
             const resp = await secureApiCall("generate-plan", {
-              endpoint: "gemini-1.5-flash:generateContent",
+              endpoint: "gemini-2.5-flash:generateContent",
               body
             });
 
@@ -1219,7 +1219,7 @@ Meal to replace: ${mealName} on ${day.day || `Day ${dayIdx+1}`}`;
 
         // Call the API
         const resp = await secureApiCall("generate-plan", {
-          endpoint: "gemini-1.5-flash:generateContent",
+          endpoint: "gemini-2.5-flash:generateContent",
           body: {
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: {
@@ -1261,7 +1261,7 @@ Meal to replace: ${mealName} on ${day.day || `Day ${dayIdx+1}`}`;
           showMessage("Improving recipe uniqueness...", 5000);
           
           const retryResp = await secureApiCall("generate-plan", {
-            endpoint: "gemini-1.5-flash:generateContent",
+            endpoint: "gemini-2.5-flash:generateContent",
             body: {
               contents: [{ parts: [{ text: prompt + "\n\nIMPORTANT: Previous attempt was too similar to existing recipes. Make this COMPLETELY DIFFERENT in ingredients, cooking style, and overall concept." }] }],
               generationConfig: {
