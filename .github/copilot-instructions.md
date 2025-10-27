@@ -213,7 +213,7 @@ Since this project has no automated test infrastructure:
 - No automated test suite (manual testing only)
 - No build system or bundler
 - CDN dependencies (requires internet connection)
-- Serverless function cold starts may cause delays
+- Serverless function cold starts may cause delays (typically 1-3 seconds on first invocation)
 - PDF generation limited by browser capabilities
 
 ## Resources
