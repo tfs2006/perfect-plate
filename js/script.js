@@ -425,21 +425,46 @@
     }
 
     async function repairPlan(plan, inputs){
-      const repairPrompt =
-        `Fix this JSON so EVERY meal has at least 1 item with {title, calories, protein, carbs, fat} (integers), and each item has non-empty ingredients[] and steps[]. ` +
-        `Keep the same days and meal names. Respect medical conditions/exclusions/culture/goal from context. ` +
-        `Return JSON ONLY in the same schema.\n\nContext: ${JSON.stringify(inputs)}\n\nCurrent JSON:\n${JSON.stringify(plan)}`;
+      try {
+        console.log("[repairPlan] Attempting to repair plan");
+        const repairPrompt =
+          `Fix this JSON so EVERY meal has at least 1 item with {title, calories, protein, carbs, fat} (integers), and each item has non-empty ingredients[] and steps[]. ` +
+          `Keep the same days and meal names. Respect medical conditions/exclusions/culture/goal from context. ` +
+          `Return JSON ONLY in the same schema.\n\nContext: ${JSON.stringify(inputs)}\n\nCurrent JSON:\n${JSON.stringify(plan)}`;
 
-      const fixRes = await secureApiCall("generate-plan", {
-        endpoint: "gemini-2.5-flash:generateContent",
-        body: {
-          contents: [{ parts: [{ text: repairPrompt }] }],
+        const fixRes = await secureApiCall("generate-plan", {
+          endpoint: "gemini-2.5-flash:generateContent",
+          body: {
+            contents: [{ parts: [{ text: repairPrompt }] }],
+            generationConfig: {
+              maxOutputTokens: 2000,
+              temperature: 0.3,
+              topP: 0.95,
+              topK: 40
+            }
+          }
+        });
+        
+        const raw = getFirstPartText(fixRes);
+        if (!raw) {
+          console.warn("[repairPlan] No text returned from repair attempt, using original plan");
+          return plan;
         }
-      });
-      const raw = fixRes?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      let fixed = extractFirstJSON(raw);
-      fixed = coercePlan(fixed);
-      return fixed || plan;
+        
+        let fixed = extractFirstJSON(raw);
+        fixed = coercePlan(fixed);
+        
+        if (!fixed) {
+          console.warn("[repairPlan] Failed to parse repaired JSON, using original plan");
+          return plan;
+        }
+        
+        console.log("[repairPlan] Successfully repaired plan");
+        return fixed;
+      } catch (err) {
+        console.error("[repairPlan] Error during repair:", err);
+        return plan; // Return original plan if repair fails
+      }
     }
 
     // ---------- Totals helper (fallback if model omits day.totals) ----------
