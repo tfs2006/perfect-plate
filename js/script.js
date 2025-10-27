@@ -644,7 +644,9 @@ User profile: ${JSON.stringify(inputs)}`;
         contents: [{ parts: [{ text: prompt }] }], 
         generationConfig: {
           maxOutputTokens: 1800, 
-          temperature: 0.7 
+          temperature: 0.7,
+          topP: 0.95,
+          topK: 40
         } 
       };
       
@@ -862,15 +864,26 @@ User profile: ${JSON.stringify(inputs)}`;
               const prompt = buildJsonPromptRange(lastInputs, [dayName], 
                 Array.from(usedTitles).slice(0, 100), 
                 Array.from(usedTokens).slice(0, 150));
+              
+              // Log prompt size for debugging
+              const promptLength = prompt.length;
+              console.log(`[generateDay] Attempt ${attempt} for ${dayName} - prompt length: ${promptLength} chars, tokens: ${maxTokens}, temp: ${temperature}`);
+              
+              if (promptLength > 20000) {
+                console.warn(`[generateDay] Prompt is very long (${promptLength} chars), this might cause issues`);
+              }
+              
               const body = {
                 contents: [{ parts: [{ text: prompt }] }],
                 generationConfig: {
                   maxOutputTokens: maxTokens,
                   temperature,
+                  // Add topP for better control over randomness
+                  topP: 0.95,
+                  // Add topK for diversity
+                  topK: 40
                 }
               };
-
-              console.log(`[generateDay] Attempt ${attempt} for ${dayName} - tokens: ${maxTokens}, temp: ${temperature}`);
 
               const resp = await secureApiCall("generate-plan", {
                 endpoint: "gemini-2.5-flash:generateContent",
@@ -1360,6 +1373,8 @@ Meal to replace: ${mealName} on ${day.day || `Day ${dayIdx+1}`}`;
             generationConfig: {
               maxOutputTokens: 1500,
               temperature: 0.7,
+              topP: 0.95,
+              topK: 40
             }
           }
         });
@@ -1402,6 +1417,8 @@ Meal to replace: ${mealName} on ${day.day || `Day ${dayIdx+1}`}`;
               generationConfig: {
                 maxOutputTokens: 1500,
                 temperature: 0.9, // Higher temperature for more creativity
+                topP: 0.95,
+                topK: 40
               }
             }
           });
