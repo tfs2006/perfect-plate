@@ -780,7 +780,7 @@ User profile: ${JSON.stringify(inputs)}`;
         const allPreviousItems = []; // Track all previously generated items for similarity checks
 
         async function generateDay(dayName) {
-          async function tryOnce(maxTokens, temperature, useSchema = true) {
+          async function tryOnce(maxTokens, temperature) {
             const prompt = buildJsonPromptRange(lastInputs, [dayName], 
               Array.from(usedTitles).slice(0, 100), 
               Array.from(usedTokens).slice(0, 150));
@@ -814,10 +814,10 @@ User profile: ${JSON.stringify(inputs)}`;
             return partPlan;
           }
 
-          // Try with schema + higher token budget, then retry with smaller budget, then without schema
-          let planPart = await tryOnce(2200, 0.7, true);
-          if (!planPart) planPart = await tryOnce(1600, 0.4, true);
-          if (!planPart) planPart = await tryOnce(1400, 0.3, false);
+          // Try with higher token budget, then retry with smaller budgets
+          let planPart = await tryOnce(2200, 0.7);
+          if (!planPart) planPart = await tryOnce(1600, 0.4);
+          if (!planPart) planPart = await tryOnce(1400, 0.3);
           return planPart;
         }
 
