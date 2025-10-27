@@ -8,6 +8,7 @@ A clean, secure AI meal planner that generates a 7‑day plan + grocery list and
 - **Structured output**: Prompts enforce **strict JSON**, so rendering is reliable.
 - **UX**: Stepper, saved form state, tabs per day, grocery list with checkboxes, PDF export.
 - **A11y & mobile**: Keyboard focus styles, reduced‑motion support, responsive layout.
+- **Robust error handling**: Automatic retries, detailed logging, and diagnostic tools.
 
 ## Repo structure
 ```
@@ -19,6 +20,7 @@ A clean, secure AI meal planner that generates a 7‑day plan + grocery list and
 /netlify/functions/   # deploy to Netlify
   generate-plan.js
 netlify.toml          # for Netlify (if you also host static there)
+test-api.html         # diagnostic tool for API troubleshooting
 ```
 
 ## Deploy (recommended split: GH Pages + Netlify Functions)
@@ -44,6 +46,48 @@ netlify.toml          # for Netlify (if you also host static there)
 
 ## Local test (no keys in client)
 You can run a simple static server (e.g., `npx http-server .`) but the app still needs the deployed Netlify function to work.
+
+## Troubleshooting
+
+If you experience issues with meal plan generation:
+
+1. **Check browser console** (F12 → Console) for detailed error logs
+2. **Use the diagnostic tool**: Open `test-api.html` in your browser
+   - Tests API connectivity
+   - Tests JSON generation
+   - Tests meal plan prompts
+   - Identifies which component is failing
+3. **Read the guides**:
+   - **[FIX_SUMMARY.md](FIX_SUMMARY.md)** - Overview of recent fixes and improvements
+   - **[DEBUGGING_GUIDE.md](DEBUGGING_GUIDE.md)** - Step-by-step troubleshooting
+   - **[TEST_API_README.md](TEST_API_README.md)** - How to use the diagnostic tool
+
+### Common Issues
+
+**"Model returned no text"**
+- The app now automatically retries with different parameters
+- Check console logs for detailed diagnostics
+- Use test-api.html to identify the specific issue
+
+**API connection errors**
+- Verify `GEMINI_API_KEY` is set in Netlify environment variables
+- Check `window.API_BASE` in js/config.js points to correct URL
+- Ensure CORS is properly configured (ALLOWED_ORIGIN)
+
+**Model not found**
+- Model name "gemini-2.5-flash" might not be available
+- Try "gemini-1.5-flash" or "gemini-1.5-pro" instead
+- See DEBUGGING_GUIDE.md for how to change model names
+
+## Recent Improvements (2025-10-27)
+
+- ✅ Enhanced error handling with automatic retries
+- ✅ Comprehensive logging for easier debugging
+- ✅ Detection of blocked content and safety issues
+- ✅ Interactive diagnostic tool (test-api.html)
+- ✅ Better generation parameters (topP, topK)
+- ✅ Clear, actionable error messages
+- ✅ Complete troubleshooting documentation
 
 ## Notes
 - If you prefer Cloudflare Workers/Vercel: change `API_BASE` to that endpoint—no other code changes required.
