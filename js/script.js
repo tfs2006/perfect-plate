@@ -963,7 +963,7 @@ User profile: ${JSON.stringify(inputs)}`;
               dayErrors.push(errMsg);
             }
           } catch (e) {
-            const errMsg = `Error generating ${day}: ${e.message || e.toString()}`;
+            const errMsg = `Error generating ${day}: ${e.message || e.name || e.toString()}`;
             console.warn(errMsg, e);
             dayErrors.push(errMsg);
           }
@@ -971,14 +971,13 @@ User profile: ${JSON.stringify(inputs)}`;
 
         if (!daysOut.length) {
           // Provide more specific error message based on what failed
-          let errorDetails;
-          if (dayErrors.length > 0) {
-            const errorSummary = dayErrors.slice(0, 3).join('; ');
-            const moreErrorsText = dayErrors.length > 3 ? ` (and ${dayErrors.length - 3} more errors)` : '';
-            errorDetails = `Failed to generate any days. ${errorSummary}${moreErrorsText}. Check console for details.`;
-          } else {
-            errorDetails = "Failed to generate meal plan. The API may be unavailable or returned invalid data. Please check your API configuration and try again.";
-          }
+          const errorDetails = dayErrors.length > 0
+            ? (() => {
+                const errorSummary = dayErrors.slice(0, 3).join('; ');
+                const moreErrorsText = dayErrors.length > 3 ? ` (and ${dayErrors.length - 3} more errors)` : '';
+                return `Failed to generate any days. ${errorSummary}${moreErrorsText}. Check console for details.`;
+              })()
+            : "Failed to generate meal plan. The API may be unavailable or returned invalid data. Please check your API configuration and try again.";
           throw new Error(errorDetails);
         }
 
