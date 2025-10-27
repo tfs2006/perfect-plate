@@ -73,6 +73,87 @@
     return null;
   }
 
+  // -------- Token Estimation for Gemini API ----------
+  /**
+   * Estimates token count from text using a simple heuristic.
+   * Gemini typically uses ~4 characters per token on average for English text.
+   * This is a rough estimate - actual tokenization may vary.
+   */
+  function estimateTokenCount(text) {
+    if (!text) return 0;
+    const chars = String(text).length;
+    // Conservative estimate: 4 chars per token (can be 3-5 depending on content)
+    return Math.ceil(chars / 4);
+  }
+
+  /**
+   * Calculate and log estimated token usage before API call.
+   * Returns an object with token estimates and warnings.
+   * 
+   * @param {string} promptText - The prompt text to be sent
+   * @param {number} maxOutputTokens - The requested maxOutputTokens
+   * @param {number} modelLimit - The model's total context window (default 8192)
+   * @returns {object} - { estimatedPromptTokens, maxOutputTokens, estimatedTotal, withinLimit, safetyBuffer }
+   */
+  function estimateAndLogTokenUsage(promptText, maxOutputTokens, modelLimit = 8192) {
+    const estimatedPromptTokens = estimateTokenCount(promptText);
+    const estimatedTotal = estimatedPromptTokens + maxOutputTokens;
+    const withinLimit = estimatedTotal < modelLimit;
+    const safetyBuffer = modelLimit - estimatedTotal;
+    
+    const estimate = {
+      estimatedPromptTokens,
+      maxOutputTokens,
+      estimatedTotal,
+      modelLimit,
+      withinLimit,
+      safetyBuffer,
+      utilizationPercent: Math.round((estimatedTotal / modelLimit) * 100)
+    };
+    
+    console.log("[Token Estimate] Pre-call estimation:", {
+      promptLength: promptText.length,
+      estimatedPromptTokens: estimate.estimatedPromptTokens,
+      requestedMaxOutput: estimate.maxOutputTokens,
+      estimatedTotal: estimate.estimatedTotal,
+      modelLimit: estimate.modelLimit,
+      utilizationPercent: estimate.utilizationPercent + "%",
+      safetyBuffer: estimate.safetyBuffer,
+      status: withinLimit ? "OK" : "⚠️ APPROACHING LIMIT"
+    });
+    
+    // Warn if approaching limits
+    if (estimate.utilizationPercent > 85) {
+      console.warn("[Token Estimate] ⚠️ High token usage: " + estimate.utilizationPercent + "% of model limit!");
+      console.warn("[Token Estimate] Consider reducing prompt size or maxOutputTokens");
+    } else if (estimate.utilizationPercent > 70) {
+      console.warn("[Token Estimate] Moderate token usage: " + estimate.utilizationPercent + "% of model limit");
+    }
+    
+    return estimate;
+  }
+
+  /**
+   * Automatically adjust maxOutputTokens based on prompt size to stay within limits.
+   * 
+   * @param {string} promptText - The prompt text
+   * @param {number} requestedMaxOutput - The desired maxOutputTokens
+   * @param {number} modelLimit - The model's context window (default 8192)
+   * @returns {number} - Adjusted maxOutputTokens that keeps total under 75% of limit
+   */
+  function adjustMaxOutputTokens(promptText, requestedMaxOutput, modelLimit = 8192) {
+    const estimatedPromptTokens = estimateTokenCount(promptText);
+    const targetUtilization = 0.75; // Stay under 75% of model limit for safety
+    const maxSafeOutput = Math.floor((modelLimit * targetUtilization) - estimatedPromptTokens);
+    
+    if (maxSafeOutput < requestedMaxOutput) {
+      console.warn(`[Token Adjust] Reducing maxOutputTokens from ${requestedMaxOutput} to ${maxSafeOutput} to stay within safe limits`);
+      return Math.max(maxSafeOutput, 300); // Ensure at least 300 tokens for output
+    }
+    
+    return requestedMaxOutput;
+  }
+
   // ---------- App ----------
   ready(() => {
     initIcons();
@@ -287,17 +368,33 @@ Rules:
           return "";
         }
         
-        // Log token usage metadata if present
+        // Log token usage metadata if present (including all fields like thoughtsTokenCount)
         if (obj.usageMetadata) {
-          console.log("[getFirstPartText] Token usage:", {
+          const tokenInfo = {
             promptTokenCount: obj.usageMetadata.promptTokenCount,
             candidatesTokenCount: obj.usageMetadata.candidatesTokenCount,
             totalTokenCount: obj.usageMetadata.totalTokenCount
+          };
+          
+          // Include any additional token counts (e.g., thoughtsTokenCount for reasoning models)
+          if (obj.usageMetadata.thoughtsTokenCount !== undefined) {
+            tokenInfo.thoughtsTokenCount = obj.usageMetadata.thoughtsTokenCount;
+          }
+          
+          // Log all available metadata fields
+          Object.keys(obj.usageMetadata).forEach(key => {
+            if (!tokenInfo[key] && obj.usageMetadata[key] !== undefined) {
+              tokenInfo[key] = obj.usageMetadata[key];
+            }
           });
+          
+          console.log("[getFirstPartText] Token usage (actual):", tokenInfo);
           
           // Warn if approaching token limits (most models have ~8192 token context window)
           if (obj.usageMetadata.totalTokenCount > 7000) {
-            console.warn("[getFirstPartText] Token count is high:", obj.usageMetadata.totalTokenCount, "- May be approaching model limits");
+            console.warn("[getFirstPartText] ⚠️ Token count is high:", obj.usageMetadata.totalTokenCount, "- May be approaching model limits");
+          } else if (obj.usageMetadata.totalTokenCount > 6000) {
+            console.warn("[getFirstPartText] Token count is elevated:", obj.usageMetadata.totalTokenCount);
           }
         }
         
@@ -342,7 +439,15 @@ Rules:
         
         // Check if content exists
         if (!candidate.content) {
-          console.warn("[getFirstPartText] No content in first candidate");
+          console.error("[getFirstPartText] ⚠️ No content in first candidate - Gemini returned empty response");
+          console.error("[getFirstPartText] This may indicate the model hit complexity/token limits");
+          console.error("[getFirstPartText] Full candidate:", JSON.stringify(candidate, null, 2));
+          
+          // Check if this is a token limit issue even without MAX_TOKENS flag
+          if (obj.usageMetadata && obj.usageMetadata.totalTokenCount > 6500) {
+            throw new Error("Empty response likely due to token limit. Total tokens: " + obj.usageMetadata.totalTokenCount);
+          }
+          
           return "";
         }
         
@@ -351,12 +456,20 @@ Rules:
         // Check if parts exist
         const parts = candidate.content.parts;
         if (!Array.isArray(parts)) {
-          console.warn("[getFirstPartText] Parts is not an array");
+          console.error("[getFirstPartText] ⚠️ Parts is not an array - Gemini returned malformed response");
+          console.error("[getFirstPartText] Content:", JSON.stringify(candidate.content, null, 2));
           return "";
         }
         
         if (parts.length === 0) {
-          console.warn("[getFirstPartText] Parts array is empty");
+          console.error("[getFirstPartText] ⚠️ Parts array is empty - Gemini returned no content");
+          console.error("[getFirstPartText] This often happens when hitting model output or complexity limits");
+          
+          // Check if this is a token limit issue
+          if (obj.usageMetadata && obj.usageMetadata.totalTokenCount > 6500) {
+            throw new Error("Empty parts likely due to token/complexity limit. Total tokens: " + obj.usageMetadata.totalTokenCount);
+          }
+          
           return "";
         }
         
@@ -850,6 +963,104 @@ Use different proteins/methods than existing recipes.`;
         const usedTokens = new Set(); // Track used tokens across all days
         const allPreviousItems = []; // Track all previously generated items for similarity checks
 
+        /**
+         * Generate a batch of days (1-2 days) with dynamic batch sizing based on token estimates.
+         * This implements the batching strategy recommended for Gemini API to avoid MAX_TOKENS issues.
+         * 
+         * @param {string[]} daysArray - Array of day names to generate (e.g., ["Monday", "Tuesday"])
+         * @param {number} maxTokens - Maximum output tokens to request
+         * @param {number} temperature - Temperature for generation
+         * @returns {object|null} - Plan object with days array, or null on failure
+         */
+        async function generateBatch(daysArray, maxTokens, temperature) {
+          try {
+            const daysList = daysArray.join(", ");
+            const prompt = buildJsonPromptRange(lastInputs, daysArray,
+              Array.from(usedTitles).slice(0, 30),
+              Array.from(usedTokens).slice(0, 40));
+            
+            // Estimate tokens and determine if batch is too large
+            const tokenEstimate = estimateAndLogTokenUsage(prompt, maxTokens);
+            
+            // If batch would use >75% of tokens, split it down to 1 day
+            if (tokenEstimate.utilizationPercent > 75 && daysArray.length > 1) {
+              console.warn(`[generateBatch] Batch of ${daysArray.length} days would use ${tokenEstimate.utilizationPercent}% of tokens`);
+              console.warn(`[generateBatch] Splitting batch - will generate days individually instead`);
+              return null; // Signal to caller to split batch
+            }
+            
+            // Auto-adjust maxOutputTokens based on estimate
+            let adjustedMaxTokens = maxTokens;
+            if (!tokenEstimate.withinLimit || tokenEstimate.utilizationPercent > 70) {
+              adjustedMaxTokens = adjustMaxOutputTokens(prompt, maxTokens);
+              console.log(`[generateBatch] Adjusted maxOutputTokens for batch ${daysList}: ${maxTokens} → ${adjustedMaxTokens}`);
+            }
+            
+            const genConfig = {
+              maxOutputTokens: adjustedMaxTokens,
+              temperature,
+              topP: 0.95,
+              topK: 40
+            };
+            
+            console.log(`[generateBatch] Generating batch: ${daysList}`);
+            console.log(`[generateBatch] Config:`, {
+              ...genConfig,
+              estimatedTotal: tokenEstimate.estimatedTotal,
+              utilizationPercent: tokenEstimate.utilizationPercent
+            });
+            
+            const body = {
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: genConfig
+            };
+            
+            const resp = await secureApiCall("generate-plan", {
+              endpoint: "gemini-2.5-flash:generateContent",
+              body
+            });
+            
+            if (!resp) {
+              console.error(`[generateBatch] Null response for batch: ${daysList}`);
+              console.error(`[generateBatch] Config used:`, genConfig);
+              return null;
+            }
+            
+            const text = getFirstPartText(resp);
+            if (!text) {
+              console.error(`[generateBatch] ⚠️ Model returned no text for batch: ${daysList}`);
+              console.error(`[generateBatch] Config used:`, genConfig);
+              console.error(`[generateBatch] Token estimate:`, tokenEstimate);
+              return null;
+            }
+            
+            console.log(`[generateBatch] ✓ Received text for batch ${daysList}, length:`, text.length);
+            
+            let batchPlan = coercePlan(extractFirstJSON(text));
+            if (!batchPlan || !Array.isArray(batchPlan.days) || batchPlan.days.length === 0) {
+              console.warn(`[generateBatch] Failed to parse JSON for batch: ${daysList}`);
+              console.log(`[generateBatch] Raw text (first 400 chars):`, String(text).slice(0, 400));
+              return null;
+            }
+            
+            if (needsRepair(batchPlan)) {
+              console.log(`[generateBatch] Batch ${daysList} needs repair`);
+              batchPlan = await repairPlan(batchPlan, lastInputs);
+            }
+            
+            console.log(`[generateBatch] ✓ Successfully generated ${batchPlan.days.length} days for batch: ${daysList}`);
+            return batchPlan;
+            
+          } catch (err) {
+            if (err.message && (err.message.includes("MAX_TOKENS") || err.message.includes("Empty"))) {
+              console.error(`[generateBatch] Token/complexity issue for batch ${daysArray.join(", ")}: ${err.message}`);
+              return null; // Signal to split batch
+            }
+            console.error(`[generateBatch] Error generating batch:`, err);
+            throw err;
+          }
+        }
+
         async function generateDay(dayName) {
           async function tryOnce(maxTokens, temperature, attempt = 1) {
             try {
@@ -857,22 +1068,41 @@ Use different proteins/methods than existing recipes.`;
                 Array.from(usedTitles).slice(0, 30),  // Reduced from 100 to 30
                 Array.from(usedTokens).slice(0, 40));  // Reduced from 150 to 40
               
-              // Log prompt size for debugging
+              // ===== PRE-CALL TOKEN ESTIMATION AND LOGGING =====
               const promptLength = prompt.length;
-              console.log(`[generateDay] Attempt ${attempt} for ${dayName} - prompt length: ${promptLength} chars, maxTokens: ${maxTokens}, temp: ${temperature}`);
+              console.log(`[generateDay] Attempt ${attempt} for ${dayName} - prompt length: ${promptLength} chars`);
+              
+              // Estimate and log token usage BEFORE making the call
+              const tokenEstimate = estimateAndLogTokenUsage(prompt, maxTokens);
+              
+              // Auto-adjust maxOutputTokens if estimate suggests we're approaching limits
+              let adjustedMaxTokens = maxTokens;
+              if (!tokenEstimate.withinLimit || tokenEstimate.utilizationPercent > 75) {
+                adjustedMaxTokens = adjustMaxOutputTokens(prompt, maxTokens);
+                console.log(`[generateDay] Adjusted maxOutputTokens for ${dayName}: ${maxTokens} → ${adjustedMaxTokens}`);
+              }
               
               if (promptLength > 2500) {
                 console.warn(`[generateDay] Prompt is long (${promptLength} chars), reducing complexity may help avoid token limits`);
               }
               
+              // Log exact configuration being used
+              const genConfig = {
+                maxOutputTokens: adjustedMaxTokens,
+                temperature,
+                topP: 0.95,
+                topK: 40
+              };
+              
+              console.log(`[generateDay] Generation config for ${dayName}:`, {
+                ...genConfig,
+                estimatedTotal: tokenEstimate.estimatedTotal,
+                utilizationPercent: tokenEstimate.utilizationPercent
+              });
+              
               const body = {
                 contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: {
-                  maxOutputTokens: maxTokens,
-                  temperature,
-                  topP: 0.95,
-                  topK: 40
-                }
+                generationConfig: genConfig
               };
 
               const resp = await secureApiCall("generate-plan", {
@@ -890,6 +1120,7 @@ Use different proteins/methods than existing recipes.`;
                 }
               } else {
                 console.error(`[generateDay] Null response from API for ${dayName}`);
+                console.error(`[generateDay] Config used:`, genConfig);
                 return null;
               }
 
@@ -897,12 +1128,14 @@ Use different proteins/methods than existing recipes.`;
               window.__lastPlanText = text || ""; // for debugging in console
               
               if (!text) {
-                console.warn(`[generateDay] Model returned no text for ${dayName} (attempt ${attempt})`);
+                console.error(`[generateDay] ⚠️ Model returned no text for ${dayName} (attempt ${attempt})`);
+                console.error(`[generateDay] Config used:`, genConfig);
+                console.error(`[generateDay] Token estimate:`, tokenEstimate);
                 console.log(`[generateDay] Full response for ${dayName}:`, JSON.stringify(resp, null, 2));
                 return null;
               }
               
-              console.log(`[generateDay] Received text for ${dayName}, length:`, text.length);
+              console.log(`[generateDay] ✓ Received text for ${dayName}, length:`, text.length);
               
               let partPlan = coercePlan(extractFirstJSON(text));
               if (!partPlan || !Array.isArray(partPlan.days)) {
@@ -943,76 +1176,170 @@ Use different proteins/methods than existing recipes.`;
           return planPart;
         }
 
-        // Generate days sequentially to ensure stability and clearer error boundaries
+        // ===== DYNAMIC BATCHING STRATEGY =====
+        // Generate days using intelligent batching: try 2-day batches first,
+        // fall back to 1-day if token estimates are too high or batches fail.
+        // This implements the recommended Gemini API approach for structured output.
         const daysOut = [];
         const dayErrors = []; // Track errors for better diagnostics
-        for (let i = 0; i < DAYS.length; i++) {
-          const day = DAYS[i];
-          if (loaderText) loaderText.textContent = `Creating your plan… ${i+1}/7 (${day})`;
-          try {
-            const part = await generateDay(day);
-            if (part?.days?.[0]) {
-              // Select unique items and track their titles and tokens
-              let processedDay = pickUniqueItemsForDay(part.days[0], usedTitles, usedTokens, allPreviousItems);
+        
+        let i = 0;
+        while (i < DAYS.length) {
+          const remainingDays = DAYS.length - i;
+          let daysToGenerate = [];
+          
+          // Determine batch size: try 2 days if we have 2+ remaining
+          if (remainingDays >= 2) {
+            daysToGenerate = [DAYS[i], DAYS[i + 1]];
+          } else {
+            daysToGenerate = [DAYS[i]];
+          }
+          
+          const daysList = daysToGenerate.join(" & ");
+          if (loaderText) loaderText.textContent = `Creating your plan… ${i+1}-${i+daysToGenerate.length}/7 (${daysList})`;
+          
+          console.log(`[Generation] Processing batch: ${daysList} (${daysToGenerate.length} day${daysToGenerate.length > 1 ? 's' : ''})`);
+          
+          let batchSuccess = false;
+          
+          // Try batch generation (with progressively lower token limits)
+          if (daysToGenerate.length > 1) {
+            // Try batch with conservative token limits for 2-day batches
+            let batchPlan = await generateBatch(daysToGenerate, 1600, 0.7);
+            if (!batchPlan) batchPlan = await generateBatch(daysToGenerate, 1200, 0.5);
+            if (!batchPlan) batchPlan = await generateBatch(daysToGenerate, 900, 0.3);
+            
+            if (batchPlan && Array.isArray(batchPlan.days) && batchPlan.days.length > 0) {
+              console.log(`[Generation] ✓ Batch succeeded for ${daysList}, got ${batchPlan.days.length} day(s)`);
               
-              // Check for both empty meals and meals that need regeneration
-              const emptyMeals = (processedDay.meals||[])
-                .filter(m => !m.items || m.items.length === 0)
-                .map(m => m.name)
-                .filter(Boolean);
-              
-              const needsRegenMeals = processedDay.needsRegeneration || [];
-              
-              // Combine both lists (avoiding duplicates)
-              const missingNames = [...new Set([...emptyMeals, ...needsRegenMeals])];
-              
-              // If any meals need regeneration or are empty, generate them now
-              if (missingNames.length > 0) {
-                const fills = await fillMissingMealsForDay(
-                  day, 
-                  missingNames, 
-                  usedTitles, 
-                  usedTokens, 
-                  lastInputs,
-                  allPreviousItems
-                );
+              // Process each day from the batch
+              for (const dayData of batchPlan.days) {
+                let processedDay = pickUniqueItemsForDay(dayData, usedTitles, usedTokens, allPreviousItems);
                 
-                if (Array.isArray(fills) && fills.length) {
-                  fills.forEach(fm => {
-                    const idx = (processedDay.meals||[]).findIndex(m => 
-                      String(m.name||'').toLowerCase() === String(fm.name||'').toLowerCase());
-                    
-                    if (idx >= 0 && Array.isArray(fm.items) && fm.items.length) {
-                      // Use the new unique item
-                      const tempDay = { meals: [ { name: processedDay.meals[idx].name, items: fm.items } ] };
-                      const chosen = pickUniqueItemsForDay(tempDay, usedTitles, usedTokens, allPreviousItems);
+                // Check for missing/incomplete meals
+                const emptyMeals = (processedDay.meals||[])
+                  .filter(m => !m.items || m.items.length === 0)
+                  .map(m => m.name)
+                  .filter(Boolean);
+                
+                const needsRegenMeals = processedDay.needsRegeneration || [];
+                const missingNames = [...new Set([...emptyMeals, ...needsRegenMeals])];
+                
+                if (missingNames.length > 0) {
+                  const fills = await fillMissingMealsForDay(
+                    dayData.day || daysToGenerate[daysOut.length],
+                    missingNames,
+                    usedTitles,
+                    usedTokens,
+                    lastInputs,
+                    allPreviousItems
+                  );
+                  
+                  if (Array.isArray(fills) && fills.length) {
+                    fills.forEach(fm => {
+                      const idx = (processedDay.meals||[]).findIndex(m => 
+                        String(m.name||'').toLowerCase() === String(fm.name||'').toLowerCase());
                       
-                      // Update the meal with the regenerated item
-                      processedDay.meals[idx].items = chosen.meals[0].items;
-                      processedDay.meals[idx].needsRegeneration = false;
-                      
-                      // Add to previous items for future similarity checks
-                      if (chosen.meals[0].items.length > 0) {
-                        allPreviousItems.push(chosen.meals[0].items[0]);
+                      if (idx >= 0 && Array.isArray(fm.items) && fm.items.length) {
+                        const tempDay = { meals: [ { name: processedDay.meals[idx].name, items: fm.items } ] };
+                        const chosen = pickUniqueItemsForDay(tempDay, usedTitles, usedTokens, allPreviousItems);
+                        
+                        processedDay.meals[idx].items = chosen.meals[0].items;
+                        processedDay.meals[idx].needsRegeneration = false;
+                        
+                        if (chosen.meals[0].items.length > 0) {
+                          allPreviousItems.push(chosen.meals[0].items[0]);
+                        }
                       }
-                    }
-                  });
+                    });
+                  }
+                  
+                  delete processedDay.needsRegeneration;
                 }
                 
-                // Remove the regeneration flag
-                delete processedDay.needsRegeneration;
+                daysOut.push(processedDay);
               }
               
-              daysOut.push(processedDay);
+              batchSuccess = true;
+              i += batchPlan.days.length; // Advance by number of days successfully generated
             } else {
-              const errMsg = `Failed to generate valid plan for ${day}`;
-              console.warn(errMsg);
-              dayErrors.push(errMsg);
+              console.warn(`[Generation] Batch failed for ${daysList}, falling back to individual day generation`);
             }
-          } catch (e) {
-            const errMsg = `Error generating ${day}: ${e.message || e.name || e.toString()}`;
-            console.warn(errMsg, e);
-            dayErrors.push(errMsg);
+          }
+          
+          // If batch failed or we have only 1 day, generate individually
+          if (!batchSuccess) {
+            for (const day of daysToGenerate) {
+              if (loaderText) loaderText.textContent = `Creating your plan… ${i+1}/7 (${day})`;
+              
+              try {
+                const part = await generateDay(day);
+                if (part?.days?.[0]) {
+                  // Select unique items and track their titles and tokens
+                  let processedDay = pickUniqueItemsForDay(part.days[0], usedTitles, usedTokens, allPreviousItems);
+                  
+                  // Check for both empty meals and meals that need regeneration
+                  const emptyMeals = (processedDay.meals||[])
+                    .filter(m => !m.items || m.items.length === 0)
+                    .map(m => m.name)
+                    .filter(Boolean);
+                  
+                  const needsRegenMeals = processedDay.needsRegeneration || [];
+                  
+                  // Combine both lists (avoiding duplicates)
+                  const missingNames = [...new Set([...emptyMeals, ...needsRegenMeals])];
+                  
+                  // If any meals need regeneration or are empty, generate them now
+                  if (missingNames.length > 0) {
+                    const fills = await fillMissingMealsForDay(
+                      day, 
+                      missingNames, 
+                      usedTitles, 
+                      usedTokens, 
+                      lastInputs,
+                      allPreviousItems
+                    );
+                    
+                    if (Array.isArray(fills) && fills.length) {
+                      fills.forEach(fm => {
+                        const idx = (processedDay.meals||[]).findIndex(m => 
+                          String(m.name||'').toLowerCase() === String(fm.name||'').toLowerCase());
+                        
+                        if (idx >= 0 && Array.isArray(fm.items) && fm.items.length) {
+                          // Use the new unique item
+                          const tempDay = { meals: [ { name: processedDay.meals[idx].name, items: fm.items } ] };
+                          const chosen = pickUniqueItemsForDay(tempDay, usedTitles, usedTokens, allPreviousItems);
+                          
+                          // Update the meal with the regenerated item
+                          processedDay.meals[idx].items = chosen.meals[0].items;
+                          processedDay.meals[idx].needsRegeneration = false;
+                          
+                          // Add to previous items for future similarity checks
+                          if (chosen.meals[0].items.length > 0) {
+                            allPreviousItems.push(chosen.meals[0].items[0]);
+                          }
+                        }
+                      });
+                    }
+                    
+                    // Remove the regeneration flag
+                    delete processedDay.needsRegeneration;
+                  }
+                  
+                  daysOut.push(processedDay);
+                } else {
+                  const errMsg = `Failed to generate valid plan for ${day}`;
+                  console.warn(errMsg);
+                  dayErrors.push(errMsg);
+                }
+              } catch (e) {
+                const errMsg = `Error generating ${day}: ${e.message || e.name || e.toString()}`;
+                console.warn(errMsg, e);
+                dayErrors.push(errMsg);
+              }
+              
+              i++; // Advance to next day
+            }
           }
         }
 
