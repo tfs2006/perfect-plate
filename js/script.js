@@ -325,12 +325,89 @@
 
     function getFirstPartText(obj){
       try {
-        const parts = obj?.candidates?.[0]?.content?.parts || [];
-        for (const p of parts) {
-          if (typeof p.text === "string" && p.text.trim()) return p.text;
+        // Log the response structure for debugging
+        console.log("[getFirstPartText] Response object keys:", obj ? Object.keys(obj) : "null");
+        
+        if (!obj) {
+          console.warn("[getFirstPartText] Response object is null or undefined");
+          return "";
+        }
+        
+        // Check for blocked content or other safety issues
+        if (obj.promptFeedback) {
+          console.warn("[getFirstPartText] Prompt feedback present:", obj.promptFeedback);
+          if (obj.promptFeedback.blockReason) {
+            console.error("[getFirstPartText] Content blocked:", obj.promptFeedback.blockReason);
+            throw new Error(`Content blocked by API: ${obj.promptFeedback.blockReason}`);
+          }
+        }
+        
+        // Check if candidates exist
+        if (!obj.candidates || !Array.isArray(obj.candidates)) {
+          console.warn("[getFirstPartText] No candidates array in response");
+          return "";
+        }
+        
+        if (obj.candidates.length === 0) {
+          console.warn("[getFirstPartText] Candidates array is empty");
+          return "";
+        }
+        
+        const candidate = obj.candidates[0];
+        console.log("[getFirstPartText] First candidate keys:", candidate ? Object.keys(candidate) : "null");
+        
+        // Check for finish reason
+        if (candidate.finishReason) {
+          console.log("[getFirstPartText] Finish reason:", candidate.finishReason);
+          if (candidate.finishReason === "SAFETY" || candidate.finishReason === "RECITATION") {
+            console.error("[getFirstPartText] Generation stopped due to:", candidate.finishReason);
+            throw new Error(`Generation stopped: ${candidate.finishReason}`);
+          }
+        }
+        
+        // Check if content exists
+        if (!candidate.content) {
+          console.warn("[getFirstPartText] No content in first candidate");
+          return "";
+        }
+        
+        console.log("[getFirstPartText] Content keys:", Object.keys(candidate.content));
+        
+        // Check if parts exist
+        const parts = candidate.content.parts;
+        if (!Array.isArray(parts)) {
+          console.warn("[getFirstPartText] Parts is not an array");
+          return "";
+        }
+        
+        if (parts.length === 0) {
+          console.warn("[getFirstPartText] Parts array is empty");
+          return "";
+        }
+        
+        console.log("[getFirstPartText] Parts count:", parts.length);
+        
+        // Try to find text in any part
+        for (let i = 0; i < parts.length; i++) {
+          const p = parts[i];
+          console.log(`[getFirstPartText] Part ${i} keys:`, p ? Object.keys(p) : "null");
+          
+          if (p && typeof p.text === "string" && p.text.trim()) {
+            console.log(`[getFirstPartText] Found text in part ${i}, length:`, p.text.length);
+            return p.text;
+          }
+        }
+        
+        console.warn("[getFirstPartText] No text found in any parts");
+        return "";
+      } catch (e) {
+        console.error("[getFirstPartText] Exception:", e);
+        // Re-throw errors about blocked content so they can be shown to user
+        if (e.message && (e.message.includes("blocked") || e.message.includes("SAFETY"))) {
+          throw e;
         }
         return "";
-      } catch { return ""; }
+      }
     }
 
     function needsRepair(plan){
@@ -348,21 +425,46 @@
     }
 
     async function repairPlan(plan, inputs){
-      const repairPrompt =
-        `Fix this JSON so EVERY meal has at least 1 item with {title, calories, protein, carbs, fat} (integers), and each item has non-empty ingredients[] and steps[]. ` +
-        `Keep the same days and meal names. Respect medical conditions/exclusions/culture/goal from context. ` +
-        `Return JSON ONLY in the same schema.\n\nContext: ${JSON.stringify(inputs)}\n\nCurrent JSON:\n${JSON.stringify(plan)}`;
+      try {
+        console.log("[repairPlan] Attempting to repair plan");
+        const repairPrompt =
+          `Fix this JSON so EVERY meal has at least 1 item with {title, calories, protein, carbs, fat} (integers), and each item has non-empty ingredients[] and steps[]. ` +
+          `Keep the same days and meal names. Respect medical conditions/exclusions/culture/goal from context. ` +
+          `Return JSON ONLY in the same schema.\n\nContext: ${JSON.stringify(inputs)}\n\nCurrent JSON:\n${JSON.stringify(plan)}`;
 
-      const fixRes = await secureApiCall("generate-plan", {
-        endpoint: "gemini-2.5-flash:generateContent",
-        body: {
-          contents: [{ parts: [{ text: repairPrompt }] }],
+        const fixRes = await secureApiCall("generate-plan", {
+          endpoint: "gemini-2.5-flash:generateContent",
+          body: {
+            contents: [{ parts: [{ text: repairPrompt }] }],
+            generationConfig: {
+              maxOutputTokens: 2000,
+              temperature: 0.3,
+              topP: 0.95,
+              topK: 40
+            }
+          }
+        });
+        
+        const raw = getFirstPartText(fixRes);
+        if (!raw) {
+          console.warn("[repairPlan] No text returned from repair attempt, using original plan");
+          return plan;
         }
-      });
-      const raw = fixRes?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      let fixed = extractFirstJSON(raw);
-      fixed = coercePlan(fixed);
-      return fixed || plan;
+        
+        let fixed = extractFirstJSON(raw);
+        fixed = coercePlan(fixed);
+        
+        if (!fixed) {
+          console.warn("[repairPlan] Failed to parse repaired JSON, using original plan");
+          return plan;
+        }
+        
+        console.log("[repairPlan] Successfully repaired plan");
+        return fixed;
+      } catch (err) {
+        console.error("[repairPlan] Error during repair:", err);
+        return plan; // Return original plan if repair fails
+      }
     }
 
     // ---------- Totals helper (fallback if model omits day.totals) ----------
@@ -567,7 +669,9 @@ User profile: ${JSON.stringify(inputs)}`;
         contents: [{ parts: [{ text: prompt }] }], 
         generationConfig: {
           maxOutputTokens: 1800, 
-          temperature: 0.7 
+          temperature: 0.7,
+          topP: 0.95,
+          topK: 40
         } 
       };
       
@@ -780,44 +884,86 @@ User profile: ${JSON.stringify(inputs)}`;
         const allPreviousItems = []; // Track all previously generated items for similarity checks
 
         async function generateDay(dayName) {
-          async function tryOnce(maxTokens, temperature) {
-            const prompt = buildJsonPromptRange(lastInputs, [dayName], 
-              Array.from(usedTitles).slice(0, 100), 
-              Array.from(usedTokens).slice(0, 150));
-            const body = {
-              contents: [{ parts: [{ text: prompt }] }],
-              generationConfig: {
-                maxOutputTokens: maxTokens,
-                temperature,
+          async function tryOnce(maxTokens, temperature, attempt = 1) {
+            try {
+              const prompt = buildJsonPromptRange(lastInputs, [dayName], 
+                Array.from(usedTitles).slice(0, 100), 
+                Array.from(usedTokens).slice(0, 150));
+              
+              // Log prompt size for debugging
+              const promptLength = prompt.length;
+              console.log(`[generateDay] Attempt ${attempt} for ${dayName} - prompt length: ${promptLength} chars, tokens: ${maxTokens}, temp: ${temperature}`);
+              
+              if (promptLength > 20000) {
+                console.warn(`[generateDay] Prompt is very long (${promptLength} chars), this might cause issues`);
               }
-            };
+              
+              const body = {
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: {
+                  maxOutputTokens: maxTokens,
+                  temperature,
+                  // Add topP for better control over randomness
+                  topP: 0.95,
+                  // Add topK for diversity
+                  topK: 40
+                }
+              };
 
-            const resp = await secureApiCall("generate-plan", {
-              endpoint: "gemini-2.5-flash:generateContent",
-              body
-            });
+              const resp = await secureApiCall("generate-plan", {
+                endpoint: "gemini-2.5-flash:generateContent",
+                body
+              });
 
-            const text = getFirstPartText(resp);
-            window.__lastPlanText = text || ""; // for debugging in console
-            if (!text) {
-              console.warn("Model returned no text for", dayName, "Full response:", resp);
+              console.log(`[generateDay] Response for ${dayName}:`, resp ? "received" : "null");
+              
+              // Log full response structure for debugging
+              if (resp) {
+                console.log(`[generateDay] Response has candidates:`, !!resp.candidates);
+                if (resp.candidates) {
+                  console.log(`[generateDay] Candidates length:`, resp.candidates.length);
+                }
+              } else {
+                console.error(`[generateDay] Null response from API for ${dayName}`);
+                return null;
+              }
+
+              const text = getFirstPartText(resp);
+              window.__lastPlanText = text || ""; // for debugging in console
+              
+              if (!text) {
+                console.warn(`[generateDay] Model returned no text for ${dayName} (attempt ${attempt})`);
+                console.log(`[generateDay] Full response for ${dayName}:`, JSON.stringify(resp, null, 2));
+                return null;
+              }
+              
+              console.log(`[generateDay] Received text for ${dayName}, length:`, text.length);
+              
+              let partPlan = coercePlan(extractFirstJSON(text));
+              if (!partPlan || !Array.isArray(partPlan.days)) {
+                console.warn(`[generateDay] Failed to parse JSON for ${dayName}`);
+                console.log(`[generateDay] Raw text (first 400 chars):`, String(text).slice(0,400));
+                return null;
+              }
+              if (needsRepair(partPlan)) {
+                console.log(`[generateDay] Plan for ${dayName} needs repair`);
+                partPlan = await repairPlan(partPlan, lastInputs);
+              }
+              return partPlan;
+            } catch (err) {
+              // If content was blocked or there's a safety issue, propagate the error
+              if (err.message && (err.message.includes("blocked") || err.message.includes("SAFETY"))) {
+                throw err;
+              }
+              console.error(`[generateDay] Error in attempt ${attempt} for ${dayName}:`, err);
               return null;
             }
-            let partPlan = coercePlan(extractFirstJSON(text));
-            if (!partPlan || !Array.isArray(partPlan.days)) {
-              console.warn("Failed to parse JSON for", dayName, "Raw text (first 400 chars):", String(text).slice(0,400));
-              return null;
-            }
-            if (needsRepair(partPlan)) {
-              partPlan = await repairPlan(partPlan, lastInputs);
-            }
-            return partPlan;
           }
 
           // Try with higher token budget, then retry with smaller budgets
-          let planPart = await tryOnce(2200, 0.7);
-          if (!planPart) planPart = await tryOnce(1600, 0.4);
-          if (!planPart) planPart = await tryOnce(1400, 0.3);
+          let planPart = await tryOnce(2200, 0.7, 1);
+          if (!planPart) planPart = await tryOnce(1600, 0.4, 2);
+          if (!planPart) planPart = await tryOnce(1400, 0.3, 3);
           return planPart;
         }
 
@@ -899,7 +1045,34 @@ User profile: ${JSON.stringify(inputs)}`;
           if (dayErrors.length > 0) {
             const errorSummary = dayErrors.slice(0, 3).join('; ');
             const moreErrorsText = dayErrors.length > 3 ? ` (and ${dayErrors.length - 3} more errors)` : '';
-            throw new Error(`Failed to generate any days. ${errorSummary}${moreErrorsText}. Check console for details.`);
+            
+            // Try a simple test call to see if the API is working at all
+            console.log("[generatePlan] Testing API with simple prompt...");
+            try {
+              const testResp = await secureApiCall("generate-plan", {
+                endpoint: "gemini-2.5-flash:generateContent",
+                body: {
+                  contents: [{ parts: [{ text: "Say 'API is working' in JSON format: {\"message\":\"API is working\"}" }] }],
+                  generationConfig: { maxOutputTokens: 100, temperature: 0.1 }
+                }
+              });
+              
+              const testText = getFirstPartText(testResp);
+              if (!testText) {
+                console.error("[generatePlan] Simple test also returned no text. Response:", testResp);
+                throw new Error(`The Gemini API is returning empty responses. This may be due to: (1) Invalid API key, (2) Model endpoint issues, (3) Rate limiting, or (4) Invalid request format. Check browser console for detailed logs. Original errors: ${errorSummary}${moreErrorsText}`);
+              } else {
+                console.log("[generatePlan] Simple test succeeded with text:", testText.substring(0, 100));
+                console.log("[generatePlan] This suggests the issue is with the meal plan prompt or response parsing.");
+                throw new Error(`Failed to generate meal plan days, but the API connection works. This suggests the prompt may be too complex or the response format is unexpected. Original errors: ${errorSummary}${moreErrorsText}. Check console for details.`);
+              }
+            } catch (testErr) {
+              if (testErr.message.includes("Failed to generate meal plan days")) {
+                throw testErr; // Re-throw if it's our own error
+              }
+              console.error("[generatePlan] Test call failed:", testErr);
+              throw new Error(`Failed to generate any days. API test also failed: ${testErr.message}. Original errors: ${errorSummary}${moreErrorsText}`);
+            }
           } else {
             throw new Error("Failed to generate meal plan. The API may be unavailable or returned invalid data. Please check your API configuration and try again.");
           }
@@ -1225,6 +1398,8 @@ Meal to replace: ${mealName} on ${day.day || `Day ${dayIdx+1}`}`;
             generationConfig: {
               maxOutputTokens: 1500,
               temperature: 0.7,
+              topP: 0.95,
+              topK: 40
             }
           }
         });
@@ -1267,6 +1442,8 @@ Meal to replace: ${mealName} on ${day.day || `Day ${dayIdx+1}`}`;
               generationConfig: {
                 maxOutputTokens: 1500,
                 temperature: 0.9, // Higher temperature for more creativity
+                topP: 0.95,
+                topK: 40
               }
             }
           });

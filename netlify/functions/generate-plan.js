@@ -34,12 +34,38 @@ exports.handler = async (event) => {
     }
 
     const url = `https://generativelanguage.googleapis.com/v1/models/${endpoint}?key=${key}`;
+    console.log("[Gemini Proxy] Calling endpoint:", endpoint);
+    console.log("[Gemini Proxy] Request body keys:", Object.keys(body));
+    
     const resp = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const text = await resp.text();
 
-    if (!resp.ok) return { statusCode: resp.status, headers: cors, body: text || JSON.stringify({ error: "Gemini API error" }) };
+    console.log("[Gemini Proxy] Response status:", resp.status);
+    console.log("[Gemini Proxy] Response length:", text.length);
+    
+    if (!resp.ok) {
+      console.error("[Gemini Proxy] API error:", text);
+      return { statusCode: resp.status, headers: cors, body: text || JSON.stringify({ error: "Gemini API error" }) };
+    }
+    
+    // Log response structure to help debug empty responses
+    try {
+      const parsed = JSON.parse(text);
+      const hasCandidates = Array.isArray(parsed.candidates) && parsed.candidates.length > 0;
+      const hasParts = hasCandidates && Array.isArray(parsed.candidates[0]?.content?.parts);
+      const hasText = hasParts && parsed.candidates[0].content.parts.some(p => p.text);
+      console.log("[Gemini Proxy] Response structure - candidates:", hasCandidates, "parts:", hasParts, "hasText:", hasText);
+      
+      if (!hasText && hasCandidates) {
+        console.warn("[Gemini Proxy] Response has candidates but no text content. Full response:", JSON.stringify(parsed, null, 2));
+      }
+    } catch (e) {
+      console.warn("[Gemini Proxy] Could not parse response for validation:", e.message);
+    }
+    
     return { statusCode: 200, headers: cors, body: text };
   } catch (err) {
+    console.error("[Gemini Proxy] Exception:", err);
     return { statusCode: 500, headers: cors, body: JSON.stringify({ error: err.message || "Server error" }) };
   }
 };

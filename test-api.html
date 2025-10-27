@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gemini API Test</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .test-section {
+      background: white;
+      padding: 20px;
+      margin-bottom: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    button {
+      background: #059669;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      margin-right: 10px;
+    }
+    button:hover {
+      background: #047857;
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    pre {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 15px;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-size: 12px;
+      max-height: 500px;
+      overflow-y: auto;
+    }
+    .status {
+      padding: 10px;
+      margin-top: 10px;
+      border-radius: 4px;
+    }
+    .success {
+      background: #d1fae5;
+      color: #065f46;
+    }
+    .error {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+    .warning {
+      background: #fef3c7;
+      color: #92400e;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔍 Gemini API Diagnostic Tool</h1>
+  <p>This tool helps diagnose issues with the Gemini API integration.</p>
+
+  <div class="test-section">
+    <h2>1. Simple Text Generation Test</h2>
+    <p>Tests if the API returns any text at all with a simple prompt.</p>
+    <button id="test-simple">Run Simple Test</button>
+    <div id="simple-result"></div>
+  </div>
+
+  <div class="test-section">
+    <h2>2. JSON Generation Test</h2>
+    <p>Tests if the API can generate structured JSON output.</p>
+    <button id="test-json">Run JSON Test</button>
+    <div id="json-result"></div>
+  </div>
+
+  <div class="test-section">
+    <h2>3. Meal Plan Test</h2>
+    <p>Tests the actual meal plan generation prompt for a single day.</p>
+    <button id="test-meal">Run Meal Plan Test</button>
+    <div id="meal-result"></div>
+  </div>
+
+  <div class="test-section">
+    <h2>4. Model Availability Test</h2>
+    <p>Tests different model names to see which ones work.</p>
+    <button id="test-models">Test Models</button>
+    <div id="models-result"></div>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script>
+    const API_BASE = window.API_BASE || "";
+
+    async function callAPI(endpoint, body) {
+      if (!API_BASE) {
+        throw new Error("API_BASE not configured in js/config.js");
+      }
+      
+      const url = `${API_BASE}/generate-plan`;
+      console.log("Calling:", url);
+      
+      const response = await fetch(url, {
+        method: "POST",
+        mode: "cors",
+        credentials: "omit",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endpoint, body })
+      });
+      
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`API error (${response.status}): ${text}`);
+      }
+      
+      return response.json();
+    }
+
+    function showResult(elementId, status, message, data = null) {
+      const el = document.getElementById(elementId);
+      let html = `<div class="status ${status}">${message}</div>`;
+      if (data) {
+        html += `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+      }
+      el.innerHTML = html;
+    }
+
+    function extractText(response) {
+      try {
+        if (!response.candidates || response.candidates.length === 0) {
+          return { success: false, message: "No candidates in response" };
+        }
+        
+        const candidate = response.candidates[0];
+        if (!candidate.content || !candidate.content.parts) {
+          return { success: false, message: "No content.parts in candidate" };
+        }
+        
+        const parts = candidate.content.parts;
+        for (const part of parts) {
+          if (part.text) {
+            return { success: true, text: part.text };
+          }
+        }
+        
+        return { success: false, message: "No text found in any parts" };
+      } catch (e) {
+        return { success: false, message: `Error extracting text: ${e.message}` };
+      }
+    }
+
+    document.getElementById('test-simple').addEventListener('click', async function() {
+      const btn = this;
+      btn.disabled = true;
+      showResult('simple-result', 'warning', '⏳ Testing...');
+      
+      try {
+        const response = await callAPI('gemini-2.5-flash:generateContent', {
+          contents: [{ parts: [{ text: "Say hello" }] }],
+          generationConfig: { maxOutputTokens: 50, temperature: 0.1 }
+        });
+        
+        const result = extractText(response);
+        if (result.success) {
+          showResult('simple-result', 'success', `✅ Success! Received text: "${result.text}"`, response);
+        } else {
+          showResult('simple-result', 'error', `❌ Failed: ${result.message}`, response);
+        }
+      } catch (e) {
+        showResult('simple-result', 'error', `❌ Error: ${e.message}`);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById('test-json').addEventListener('click', async function() {
+      const btn = this;
+      btn.disabled = true;
+      showResult('json-result', 'warning', '⏳ Testing...');
+      
+      try {
+        const response = await callAPI('gemini-2.5-flash:generateContent', {
+          contents: [{ parts: [{ text: 'Return JSON only: {"greeting":"hello","number":42}' }] }],
+          generationConfig: { maxOutputTokens: 100, temperature: 0.1 }
+        });
+        
+        const result = extractText(response);
+        if (result.success) {
+          try {
+            const json = JSON.parse(result.text.replace(/```json\n?/g, '').replace(/```/g, '').trim());
+            showResult('json-result', 'success', `✅ Success! Parsed JSON successfully`, { response, parsed: json });
+          } catch (e) {
+            showResult('json-result', 'warning', `⚠️ Got text but failed to parse JSON: ${e.message}. Text: ${result.text}`, response);
+          }
+        } else {
+          showResult('json-result', 'error', `❌ Failed: ${result.message}`, response);
+        }
+      } catch (e) {
+        showResult('json-result', 'error', `❌ Error: ${e.message}`);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById('test-meal').addEventListener('click', async function() {
+      const btn = this;
+      btn.disabled = true;
+      showResult('meal-result', 'warning', '⏳ Testing...');
+      
+      const prompt = `Return STRICT JSON ONLY (no markdown) with this schema:
+{
+  "planTitle": "Monday Meal Plan",
+  "days": [{
+    "day": "Monday",
+    "summary": "A healthy day of eating",
+    "totals": {"calories": 1800, "protein": 120, "carbs": 180, "fat": 60},
+    "meals": [{
+      "name": "Breakfast",
+      "items": [{
+        "title": "Oatmeal with Berries",
+        "calories": 350, "protein": 20, "carbs": 55, "fat": 9,
+        "rationale": "High fiber start to the day.",
+        "tags": ["High-fiber"],
+        "allergens": [],
+        "substitutions": [],
+        "prepTime": 5, "cookTime": 5,
+        "ingredients": [
+          {"item":"Rolled oats","qty":0.75,"unit":"cup","category":"Grains"},
+          {"item":"Blueberries","qty":0.5,"unit":"cup","category":"Produce"}
+        ],
+        "steps": ["Simmer oats in milk.", "Top with berries."]
+      }]
+    }]
+  }]
+}
+
+Generate one day (Monday) with breakfast only for a 30-year-old male seeking weight loss.`;
+      
+      try {
+        const response = await callAPI('gemini-2.5-flash:generateContent', {
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 1500, temperature: 0.5 }
+        });
+        
+        const result = extractText(response);
+        if (result.success) {
+          try {
+            const text = result.text.replace(/```json\n?/g, '').replace(/```/g, '').trim();
+            const json = JSON.parse(text);
+            showResult('meal-result', 'success', `✅ Success! Generated meal plan`, { response, parsed: json });
+          } catch (e) {
+            showResult('meal-result', 'warning', `⚠️ Got text but failed to parse JSON: ${e.message}. Text (first 500 chars): ${result.text.substring(0, 500)}`, response);
+          }
+        } else {
+          showResult('meal-result', 'error', `❌ Failed: ${result.message}`, response);
+        }
+      } catch (e) {
+        showResult('meal-result', 'error', `❌ Error: ${e.message}`);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById('test-models').addEventListener('click', async function() {
+      const btn = this;
+      btn.disabled = true;
+      showResult('models-result', 'warning', '⏳ Testing multiple models...');
+      
+      const models = [
+        'gemini-2.5-flash:generateContent',
+        'gemini-1.5-flash:generateContent',
+        'gemini-1.5-pro:generateContent',
+        'gemini-pro:generateContent'
+      ];
+      
+      const results = [];
+      
+      for (const model of models) {
+        try {
+          console.log(`Testing model: ${model}`);
+          const response = await callAPI(model, {
+            contents: [{ parts: [{ text: "Say 'working'" }] }],
+            generationConfig: { maxOutputTokens: 50, temperature: 0.1 }
+          });
+          
+          const result = extractText(response);
+          results.push({
+            model,
+            success: result.success,
+            message: result.success ? `✅ Working! Text: "${result.text}"` : `❌ ${result.message}`
+          });
+        } catch (e) {
+          results.push({
+            model,
+            success: false,
+            message: `❌ Error: ${e.message}`
+          });
+        }
+      }
+      
+      const summary = results.map(r => `<div class="status ${r.success ? 'success' : 'error'}">${r.model}: ${r.message}</div>`).join('');
+      document.getElementById('models-result').innerHTML = summary + `<pre>${JSON.stringify(results, null, 2)}</pre>`;
+      
+      btn.disabled = false;
+    });
+  </script>
+</body>
+</html>
