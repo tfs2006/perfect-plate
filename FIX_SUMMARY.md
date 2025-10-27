@@ -161,9 +161,9 @@ Each check provides a specific log message, making it easy to identify exactly w
 **Cause:** Too many avoid lists or constraints  
 **Solution:** Simplify prompt, reduce avoid lists
 
-### Issue: Model endpoint not found
-**Cause:** Model name "gemini-2.5-flash" might not exist  
-**Solution:** Try "gemini-1.5-flash" or "gemini-1.5-pro" instead
+### Issue: Model endpoint configuration
+**Updated:** Now uses "gemini-pro" for improved structured output reliability  
+**Alternatives:** Can try "gemini-1.5-flash" or "gemini-1.5-pro" if needed
 
 ## Benefits
 

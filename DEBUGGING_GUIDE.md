@@ -128,19 +128,19 @@ Look for these indicators in the response:
 
 ## Common Solutions
 
-### Solution 1: Model Name is Incorrect
-The code uses `gemini-2.5-flash` which may not exist yet.
+### Solution 1: Model Name Configuration
+The code now uses `gemini-pro` for improved structured output reliability.
 
-**Fix:** Update all instances to use correct model name:
-- Try `gemini-1.5-flash` (recommended for speed)
-- Try `gemini-1.5-pro` (better quality)
-- Try `gemini-pro` (legacy, but stable)
+**Current model:** `gemini-pro` (optimized for structured JSON output)
+**Alternative models if needed:**
+- Try `gemini-1.5-flash` (faster, but may be less reliable with structured output)
+- Try `gemini-1.5-pro` (better quality, slower)
 
-**How to update:**
+**How to update (if needed):**
 ```javascript
-// Replace all instances of:
-endpoint: "gemini-2.5-flash:generateContent"
-// With:
+// Current implementation uses:
+endpoint: "gemini-pro:generateContent"
+// To try alternatives, replace with:
 endpoint: "gemini-1.5-flash:generateContent"
 ```
 

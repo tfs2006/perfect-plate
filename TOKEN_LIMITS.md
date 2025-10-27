@@ -7,11 +7,16 @@ This document explains the token limits for Gemini API models and how the Perfec
 ## Token Limits
 
 Most Gemini models have the following limits:
-- **Context window**: 8,192 tokens for gemini-1.5-flash and gemini-2.5-flash; 32,768 tokens for gemini-1.5-pro (combined prompt + response)
-- **Input (prompt)**: Variable, but typically up to 7,000+ tokens
+- **Context window**: 
+  - `gemini-1.5-flash`: 8,192 tokens (combined prompt + response)
+  - `gemini-1.5-pro`: 32,768 tokens (combined prompt + response)
+  - `gemini-pro`: ~30,000 tokens (combined prompt + response)
+- **Input (prompt)**: Variable, but typically up to 7,000+ tokens for smaller models
 - **Output (response)**: Limited by `maxOutputTokens` parameter
 
 **Important**: The `totalTokenCount` (prompt + response) must stay under the context window limit.
+
+**Note**: The app's token management is configured conservatively for 8K token limits to ensure compatibility across different model versions and avoid MAX_TOKENS errors.
 
 ## How Perfect-Plate Manages Tokens
 
@@ -197,9 +202,11 @@ Different models may have different limits:
 
 | Model | Context Window | Notes |
 |-------|---------------|-------|
-| gemini-1.5-flash | 8,192 tokens | Fast, recommended |
+| gemini-pro | ~30,000 tokens | **Current default**, optimized for structured output, larger context than flash models |
+| gemini-1.5-flash | 8,192 tokens | Fast alternative, smaller context |
 | gemini-1.5-pro | 32,768 tokens | Larger context, slower |
-| gemini-2.5-flash | 8,192 tokens | Latest, similar limits |
+
+**Note**: The app uses conservative token management (targeting <8K) to ensure reliability across different model versions and avoid truncation issues.
 
 To switch models, update the endpoint in code:
 ```javascript

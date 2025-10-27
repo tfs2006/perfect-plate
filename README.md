@@ -75,8 +75,8 @@ If you experience issues with meal plan generation:
 - Ensure CORS is properly configured (ALLOWED_ORIGIN)
 
 **Model not found**
-- Model name "gemini-2.5-flash" might not be available
-- Try "gemini-1.5-flash" or "gemini-1.5-pro" instead
+- The app now uses "gemini-pro" for improved structured output reliability
+- If issues occur, try "gemini-1.5-flash" or "gemini-1.5-pro" as alternatives
 - See DEBUGGING_GUIDE.md for how to change model names
 
 ## Recent Improvements (2025-10-27)
