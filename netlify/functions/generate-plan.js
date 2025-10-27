@@ -58,26 +58,45 @@ exports.handler = async (event) => {
       
       console.log("[Gemini Proxy] Response structure - candidates:", hasCandidates, "parts:", hasParts, "hasText:", hasText, "finishReason:", finishReason);
       
-      // Log token usage if present
+      // Log token usage if present (including all metadata like thoughtsTokenCount)
       if (parsed.usageMetadata) {
-        console.log("[Gemini Proxy] Token usage:", {
+        const tokenInfo = {
           promptTokenCount: parsed.usageMetadata.promptTokenCount,
           candidatesTokenCount: parsed.usageMetadata.candidatesTokenCount,
           totalTokenCount: parsed.usageMetadata.totalTokenCount
+        };
+        
+        // Include any additional token counts (e.g., thoughtsTokenCount for reasoning models)
+        if (parsed.usageMetadata.thoughtsTokenCount !== undefined) {
+          tokenInfo.thoughtsTokenCount = parsed.usageMetadata.thoughtsTokenCount;
+        }
+        
+        // Log all available metadata fields
+        Object.keys(parsed.usageMetadata).forEach(key => {
+          if (!tokenInfo[key] && parsed.usageMetadata[key] !== undefined) {
+            tokenInfo[key] = parsed.usageMetadata[key];
+          }
         });
+        
+        console.log("[Gemini Proxy] Token usage (actual):", tokenInfo);
         
         // Warn if hitting token limits
         if (finishReason === "MAX_TOKENS") {
-          console.error("[Gemini Proxy] Response hit MAX_TOKENS - output is incomplete!");
+          console.error("[Gemini Proxy] ⚠️ Response hit MAX_TOKENS - output is incomplete!");
+          console.error("[Gemini Proxy] Token counts:", tokenInfo);
         }
         
         if (parsed.usageMetadata.totalTokenCount > 7000) {
-          console.warn("[Gemini Proxy] Total token count is high:", parsed.usageMetadata.totalTokenCount);
+          console.warn("[Gemini Proxy] ⚠️ Total token count is high:", parsed.usageMetadata.totalTokenCount, "- Approaching model limits");
+        } else if (parsed.usageMetadata.totalTokenCount > 6000) {
+          console.warn("[Gemini Proxy] Token count is elevated:", parsed.usageMetadata.totalTokenCount);
         }
       }
       
       if (!hasText && hasCandidates) {
-        console.warn("[Gemini Proxy] Response has candidates but no text content. Full response:", JSON.stringify(parsed, null, 2));
+        console.error("[Gemini Proxy] ⚠️ Response has candidates but no text content");
+        console.error("[Gemini Proxy] This often indicates hitting model complexity/token limits");
+        console.warn("[Gemini Proxy] Full response:", JSON.stringify(parsed, null, 2));
       }
     } catch (e) {
       console.warn("[Gemini Proxy] Could not parse response for validation:", e.message);
