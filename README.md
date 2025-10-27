@@ -75,9 +75,9 @@ If you experience issues with meal plan generation:
 - Ensure CORS is properly configured (ALLOWED_ORIGIN)
 
 **Model not found**
-- The app now uses "gemini-pro" for improved structured output reliability
-- If issues occur, try "gemini-1.5-flash" or "gemini-1.5-pro" as alternatives
-- See DEBUGGING_GUIDE.md for how to change model names
+- The app now uses "models/gemini-1.5-pro" which is the officially supported model for Gemini API v1
+- This prevents 404 NOT_FOUND errors from deprecated model names like "gemini-pro"
+- Use test-api.html to verify model availability via the List Models feature
 
 ## Recent Improvements (2025-10-27)
 

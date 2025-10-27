@@ -519,7 +519,7 @@ Rules:
           `Fix JSON: Add missing ingredients[] and steps[] to all items. Keep same structure. Return JSON ONLY.\n\nProfile: ${JSON.stringify(inputs)}\n\nJSON:\n${JSON.stringify(plan)}`;
 
         const fixRes = await secureApiCall("generate-plan", {
-          endpoint: "gemini-pro:generateContent",
+          endpoint: "models/gemini-1.5-pro:generateContent",
           body: {
             contents: [{ parts: [{ text: repairPrompt }] }],
             generationConfig: {
@@ -755,7 +755,7 @@ Use different proteins/methods than existing recipes.`;
         } 
       };
       
-      const resp = await secureApiCall('generate-plan', { endpoint: 'gemini-pro:generateContent', body });
+      const resp = await secureApiCall('generate-plan', { endpoint: 'models/gemini-1.5-pro:generateContent', body });
       const text = getFirstPartText(resp);
       const obj = extractFirstJSON(text);
       
@@ -1004,7 +1004,7 @@ Use different proteins/methods than existing recipes.`;
             };
             
             console.log(`[generateBatch] Generating batch: ${daysList}`);
-            console.log(`[generateBatch] Using model: gemini-pro (optimized for structured output)`);
+            console.log(`[generateBatch] Using model: models/gemini-1.5-pro (optimized for structured output)`);
             console.log(`[generateBatch] Config:`, {
               ...genConfig,
               estimatedTotal: tokenEstimate.estimatedTotal,
@@ -1017,7 +1017,7 @@ Use different proteins/methods than existing recipes.`;
             };
             
             const resp = await secureApiCall("generate-plan", {
-              endpoint: "gemini-pro:generateContent",
+              endpoint: "models/gemini-1.5-pro:generateContent",
               body
             });
             
@@ -1095,7 +1095,7 @@ Use different proteins/methods than existing recipes.`;
                 topK: 40
               };
               
-              console.log(`[generateDay] Using model: gemini-pro (optimized for structured output)`);
+              console.log(`[generateDay] Using model: models/gemini-1.5-pro (optimized for structured output)`);
               console.log(`[generateDay] Generation config for ${dayName}:`, {
                 ...genConfig,
                 estimatedTotal: tokenEstimate.estimatedTotal,
@@ -1108,7 +1108,7 @@ Use different proteins/methods than existing recipes.`;
               };
 
               const resp = await secureApiCall("generate-plan", {
-                endpoint: "gemini-pro:generateContent",
+                endpoint: "models/gemini-1.5-pro:generateContent",
                 body
               });
 
@@ -1355,7 +1355,7 @@ Use different proteins/methods than existing recipes.`;
             console.log("[generatePlan] Testing API with simple prompt...");
             try {
               const testResp = await secureApiCall("generate-plan", {
-                endpoint: "gemini-pro:generateContent",
+                endpoint: "models/gemini-1.5-pro:generateContent",
                 body: {
                   contents: [{ parts: [{ text: "Say 'API is working' in JSON format: {\"message\":\"API is working\"}" }] }],
                   generationConfig: { maxOutputTokens: 100, temperature: 0.1 }
@@ -1677,7 +1677,7 @@ Use different proteins/methods/cuisines.`;
 
         // Call the API
         const resp = await secureApiCall("generate-plan", {
-          endpoint: "gemini-pro:generateContent",
+          endpoint: "models/gemini-1.5-pro:generateContent",
           body: {
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: {
@@ -1721,7 +1721,7 @@ Use different proteins/methods/cuisines.`;
           showMessage("Improving recipe uniqueness...", 5000);
           
           const retryResp = await secureApiCall("generate-plan", {
-            endpoint: "gemini-pro:generateContent",
+            endpoint: "models/gemini-1.5-pro:generateContent",
             body: {
               contents: [{ parts: [{ text: prompt + "\n\nIMPORTANT: Make this COMPLETELY DIFFERENT." }] }],
               generationConfig: {
