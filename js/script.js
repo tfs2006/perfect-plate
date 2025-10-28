@@ -301,26 +301,18 @@
       }
     }
 
-    // ---------- Prompt (simplified for token efficiency) ----------
+    // ---------- Prompt (optimized for efficiency) ----------
     function buildJsonPromptRange(i, daysArray, avoidTitles = [], avoidTokens = []) {
       const daysList = daysArray.join(", ");
-      // Limit avoid lists to prevent prompt from being too long
-      const avoidList = avoidTitles.length ? avoidTitles.slice(0, 30).join(", ") : "none";
-      const avoidTok = avoidTokens.length ? avoidTokens.slice(0, 40).join(", ") : "none";
+      // Drastically limit avoid lists for efficiency
+      const avoidList = avoidTitles.length ? avoidTitles.slice(0, 15).join(", ") : "";
+      const avoidTok = avoidTokens.length ? avoidTokens.slice(0, 20).join(", ") : "";
 
-      return `JSON ONLY (no markdown). Schema:
-{"days":[{"day":"Monday","summary":"Brief overview","totals":{"calories":1800,"protein":120,"carbs":180,"fat":60},"meals":[{"name":"Breakfast","items":[{"title":"Oatmeal with Berries","calories":350,"protein":20,"carbs":55,"fat":9,"rationale":"Brief reason","tags":["High-fiber"],"allergens":[],"substitutions":[],"prepTime":5,"cookTime":5,"ingredients":[{"item":"Rolled oats","qty":0.75,"unit":"cup","category":"Grains"}],"steps":["Step 1","Step 2"]}]}]}]}
+      return `JSON schema: {"days":[{"day":"Mon","totals":{"calories":1800,"protein":120,"carbs":180,"fat":60},"meals":[{"name":"Breakfast","items":[{"title":"Eggs & Toast","calories":350,"protein":20,"carbs":30,"fat":15,"ingredients":[{"item":"Eggs","qty":2,"unit":"large"}],"steps":["Cook eggs","Serve"]}]}]}]}
 
-Days: ${daysList}
-Profile: Age ${i.age}, ${i.gender}, ${i.ethnicity}, goal: ${i.fitnessGoal}${i.dietaryPrefs?.length ? ', diet: '+i.dietaryPrefs.join('/') : ''}${i.exclusions ? ', exclude: '+i.exclusions : ''}${i.medicalConditions ? ', conditions: '+i.medicalConditions : ''}
+${daysList} for ${i.age}yr ${i.gender}, ${i.ethnicity}, ${i.fitnessGoal}${i.dietaryPrefs?.length ? ', '+i.dietaryPrefs.join('/') : ''}${i.exclusions ? ', no: '+i.exclusions : ''}
 
-Rules:
-1. Each day has 3 meals: Breakfast, Lunch, Dinner (1 item each)
-2. Each item MUST have ingredients[] and steps[]
-3. No duplicate titles. Avoid: ${avoidList}
-4. Vary proteins/grains. Avoid keywords: ${avoidTok}
-5. Use integers for macros/times
-6. Keep titles <60 chars`;
+3 meals/day (B/L/D), 1 item each. Vary proteins.${avoidList ? ' Avoid: '+avoidList : ''}${avoidTok ? ' Skip: '+avoidTok : ''}`;
     }
 
     // ---------- JSON helpers ----------
