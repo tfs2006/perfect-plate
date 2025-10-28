@@ -112,13 +112,15 @@ Go to: **Netlify Dashboard → Site Settings → Environment Variables**
 Add the following variables:
 
 ```
-GEMINI_API_KEY = [Paste the API key from the problem statement here]
+GEMINI_API_KEY = [Your actual Vertex AI API key - starts with AQ.]
 GEMINI_API_ENDPOINT = vertex
 GEMINI_MODEL = gemini-2.5-flash-lite
 ALLOWED_ORIGIN = [Your GitHub Pages URL or leave as *]
 ```
 
-**Important**: Use the actual API key provided in the problem statement. It is NOT stored in this repository for security reasons.
+**Important**: Never commit your actual API key to code. Only set it in Netlify's environment variables dashboard.
+
+**Note**: Your actual Vertex AI API key should be obtained from Google Cloud Console and set in Netlify's secure environment variables. It is NOT stored in this repository for security reasons.
 
 ### Step 2: Deploy to Netlify
 
@@ -233,4 +235,4 @@ This implementation provides:
 
 ---
 
-**Note**: Remember to set the actual API key (from the problem statement) in Netlify environment variables. The key is intentionally not stored in this repository for security reasons.
+**Note**: Remember to set your actual Vertex AI API key in Netlify environment variables. The key is intentionally not stored in this repository for security reasons. Obtain your API key from Google Cloud Console.
