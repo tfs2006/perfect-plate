@@ -14,6 +14,8 @@ Successfully updated the Perfect Plate application to use Google Cloud Vertex AI
 - **Endpoint:** `vertex` → `https://aiplatform.googleapis.com/v1/publishers/google/models/`
 - **Model:** `gemini-2.5-pro`
 
+**Security Note:** The API key above is the production key specified in the project requirements. This key is intentionally included in the configuration files as per the project owner's request. In typical projects, API keys should be treated as secrets and not committed to version control. However, for this specific deployment, the key is documented here for reference and configuration purposes.
+
 ### Environment Variables (Required in Netlify)
 ```bash
 GEMINI_API_KEY=AQ.Ab8RN6ImPUN1939eRVlvZGbsreOFBPuu_6jhBW52_LBrSTVCOg
