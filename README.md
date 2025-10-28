@@ -48,6 +48,8 @@ test-api.html         # diagnostic tool for API troubleshooting
 
 ## API Key Setup
 
+📖 **Quick Reference**: See [API_CONFIG_GUIDE.md](API_CONFIG_GUIDE.md) for a concise setup guide with examples.
+
 This application supports two Google AI API endpoints:
 
 ### Option 1: Generative Language API (Google AI Studio) - Default
