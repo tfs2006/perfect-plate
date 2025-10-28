@@ -4,13 +4,13 @@ This guide provides quick instructions for configuring the Perfect-Plate Gemini 
 
 ## TL;DR - Quick Setup
 
-### For New Vertex AI API Key
+### For API Key Restricted to gemini-2.5-pro
 
 ```bash
 # In Netlify Dashboard → Site Settings → Environment Variables, set:
-GEMINI_API_KEY=AQ.YOUR_VERTEX_AI_KEY_HERE
-GEMINI_API_ENDPOINT=vertex
-GEMINI_MODEL=gemini-2.5-flash-lite
+GEMINI_API_KEY=YOUR_API_KEY_HERE
+GEMINI_API_ENDPOINT=generativelanguage
+GEMINI_MODEL=gemini-2.5-pro
 ```
 
 Then redeploy your site.
@@ -21,7 +21,7 @@ Then redeploy your site.
 # In Netlify Dashboard → Site Settings → Environment Variables, set:
 GEMINI_API_KEY=AIzaSy...your_key_here
 GEMINI_API_ENDPOINT=generativelanguage  # or leave unset for default
-GEMINI_MODEL=gemini-1.5-pro  # or gemini-1.5-flash
+GEMINI_MODEL=gemini-2.5-pro  # Only allowed model for this configuration
 ```
 
 Then redeploy your site.
@@ -32,7 +32,7 @@ Then redeploy your site.
 |----------|----------|---------|-------------|
 | `GEMINI_API_KEY` | ✅ Yes | - | Your Google AI or Vertex AI API key |
 | `GEMINI_API_ENDPOINT` | ❌ No | `generativelanguage` | API endpoint type: `generativelanguage` or `vertex` |
-| `GEMINI_MODEL` | ❌ No | `gemini-2.5-flash-lite` | Model to use (overrides frontend) |
+| `GEMINI_MODEL` | ❌ No | `gemini-2.5-pro` | Model to use (overrides frontend) |
 | `ALLOWED_ORIGIN` | ❌ No | `*` | CORS allowed origins (comma-separated) |
 
 ## Endpoint Options
@@ -42,20 +42,16 @@ Then redeploy your site.
 - **API Key Format**: `AIzaSy...`
 - **Get Key From**: [Google AI Studio](https://aistudio.google.com/app/apikey)
 - **Best For**: Quick setup, personal projects
-- **Recommended Models**:
-  - `gemini-1.5-pro` - Best quality
-  - `gemini-1.5-flash` - Fast and economical
-  - `gemini-1.5-flash-8b` - Lightweight
+- **Allowed Models**:
+  - `gemini-2.5-pro` - Only model available for current API key configuration
 
 ### Option 2: Vertex AI (Google Cloud)
 - **Endpoint Type**: `vertex` or `vertexai`
 - **API Key Format**: `AQ.Ab8...`
 - **Get Key From**: [Google Cloud Console](https://console.cloud.google.com/)
 - **Best For**: Production, enterprise, need for control
-- **Recommended Models**:
-  - `gemini-2.5-flash-lite` - Latest lite model
-  - `gemini-1.5-flash` - Fast and reliable
-  - `gemini-1.5-pro` - High quality
+- **Allowed Models**:
+  - `gemini-2.5-pro` - Only model available for current API key configuration
 
 ## Testing Your Configuration
 
@@ -77,7 +73,7 @@ Visit: `https://your-site.netlify.app/.netlify/functions/health-check`
     "apiKey": "AQ.YOUR_VERT...HERE",
     "endpointType": "vertex",
     "baseUrl": "https://aiplatform.googleapis.com/v1/publishers/google/models/",
-    "model": "gemini-2.5-flash-lite"
+    "model": "gemini-2.5-pro"
   },
   "tests": {
     "vertexModelAccess": "SUCCESS",
@@ -107,52 +103,41 @@ Visit: `https://your-site.netlify.app/.netlify/functions/list-models`
 **What to look for**:
 ```
 [Gemini Proxy] Using vertex endpoint: https://aiplatform.googleapis.com/v1/publishers/google/models/
-[Gemini Proxy] Model endpoint: gemini-2.5-flash-lite:generateContent
-[Gemini Proxy] API Key: AQ.YOUR_VER...HERE
-[Gemini Proxy] ✅ Model 'models/gemini-2.5-flash-lite' check passed
+[Gemini Proxy] Model endpoint: gemini-2.5-pro:generateContent
+[Gemini Proxy] API Key: YOUR_API_...HERE
+[Gemini Proxy] ✅ Model 'models/gemini-2.5-pro' check passed
 ```
 
 ## Switching Between Endpoints
 
-### From Generative Language to Vertex AI
+### Changing API Endpoints
+
+**Note**: This configuration is restricted to `gemini-2.5-pro` only due to API key limitations.
 
 ```bash
 # Update these environment variables in Netlify:
-GEMINI_API_KEY=AQ.YOUR_VERTEX_AI_KEY_HERE  # New Vertex key
-GEMINI_API_ENDPOINT=vertex  # Change from generativelanguage to vertex
-GEMINI_MODEL=gemini-2.5-flash-lite  # Use Vertex-compatible model
+GEMINI_API_KEY=YOUR_API_KEY_HERE
+GEMINI_API_ENDPOINT=generativelanguage  # or vertex
+GEMINI_MODEL=gemini-2.5-pro  # Only allowed model
 ```
 
 Then trigger a redeploy.
 
-### From Vertex AI to Generative Language
+## Model Configuration
 
+### Allowed Models
+This configuration is restricted to:
 ```bash
-# Update these environment variables in Netlify:
-GEMINI_API_KEY=AIzaSy...your_key_here  # Google AI Studio key
-GEMINI_API_ENDPOINT=generativelanguage  # Change from vertex
-GEMINI_MODEL=gemini-1.5-pro  # Use Gen Language model
-```
-
-Then trigger a redeploy.
-
-## Changing Models
-
-### Without Code Changes
-Simply update the `GEMINI_MODEL` environment variable:
-```bash
-GEMINI_MODEL=gemini-2.5-flash-lite  # For Vertex AI
-# or
-GEMINI_MODEL=gemini-1.5-flash  # For faster responses
+GEMINI_MODEL=gemini-2.5-pro  # Only allowed model for current API key
 ```
 
 The backend will automatically use this model for all requests.
 
 ### Model Selection Priority
 1. **Backend environment variable** (`GEMINI_MODEL`) - Highest priority
-2. **Frontend code** (`gemini-1.5-pro` by default) - Used if no env var set
+2. **Frontend code** (`gemini-2.5-pro` by default) - Used if no env var set
 
-This means you can switch models without touching the frontend code.
+This means you can switch models without touching the frontend code (though only gemini-2.5-pro is allowed for this configuration).
 
 ## Troubleshooting
 
@@ -165,8 +150,9 @@ This means you can switch models without touching the frontend code.
 ### Issue: "MODEL_NOT_FOUND"
 **Solution**:
 - Check health-check endpoint to verify model availability
-- For Vertex AI, ensure model is enabled in Google Cloud Console
-- Try an alternative model from the list-models endpoint
+- This configuration only supports gemini-2.5-pro
+- Ensure gemini-2.5-pro is enabled for your API key
+- Contact your API key provider if model is not available
 
 ### Issue: 404 or API errors
 **Solution**:
@@ -191,11 +177,11 @@ GEMINI_MODEL=gemini-2.5-flash-lite
 ALLOWED_ORIGIN=https://yourusername.github.io
 ```
 
-### Configuration 2: Google AI Studio with Pro model
+### Configuration 2: Google AI Studio with gemini-2.5-pro
 ```bash
 GEMINI_API_KEY=AIzaSy...your_key_here
 GEMINI_API_ENDPOINT=generativelanguage
-GEMINI_MODEL=gemini-1.5-pro
+GEMINI_MODEL=gemini-2.5-pro
 ALLOWED_ORIGIN=https://yourusername.github.io
 ```
 
@@ -203,7 +189,7 @@ ALLOWED_ORIGIN=https://yourusername.github.io
 ```bash
 GEMINI_API_KEY=your_key_here
 GEMINI_API_ENDPOINT=generativelanguage
-GEMINI_MODEL=gemini-1.5-flash
+GEMINI_MODEL=gemini-2.5-pro
 ALLOWED_ORIGIN=*
 ```
 

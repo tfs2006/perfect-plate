@@ -35,7 +35,7 @@ test-api.html         # diagnostic tool for API troubleshooting
    - In Netlify site → **Site settings → Environment variables**:
      - `GEMINI_API_KEY` = `YOUR_KEY` (REQUIRED - see API Key Setup below)
      - `GEMINI_API_ENDPOINT` = `generativelanguage` or `vertex` (OPTIONAL - defaults to `generativelanguage`)
-     - `GEMINI_MODEL` = `gemini-2.5-flash-lite` or other model (OPTIONAL - defaults to `gemini-2.5-flash-lite`)
+     - `GEMINI_MODEL` = `gemini-2.5-pro` (OPTIONAL - defaults to `gemini-2.5-pro`, only allowed model for this configuration)
      - `ALLOWED_ORIGIN` = `https://<you>.github.io` (OPTIONAL - defaults to `*`)
    - Deploy → copy your site URL, e.g. `https://perfect-plate-fns.netlify.app`
 
@@ -63,12 +63,10 @@ Best for personal projects and quick setup.
 2. **Configure in Netlify**:
    - Set `GEMINI_API_KEY` = your API key
    - Set `GEMINI_API_ENDPOINT` = `generativelanguage` (or leave unset for default)
-   - Set `GEMINI_MODEL` = `gemini-1.5-pro` or `gemini-1.5-flash`
+   - Set `GEMINI_MODEL` = `gemini-2.5-pro`
 
 3. **Supported Models**:
-   - `gemini-1.5-pro` (recommended for quality)
-   - `gemini-1.5-flash` (faster, more cost-effective)
-   - `gemini-1.5-flash-8b` (lightweight)
+   - `gemini-2.5-pro` (recommended - only model available with current API key configuration)
 
 ### Option 2: Vertex AI (Google Cloud)
 Best for production and enterprise use with more control.
@@ -81,12 +79,10 @@ Best for production and enterprise use with more control.
 2. **Configure in Netlify**:
    - Set `GEMINI_API_KEY` = your API key
    - Set `GEMINI_API_ENDPOINT` = `vertex`
-   - Set `GEMINI_MODEL` = `gemini-2.5-flash-lite` (recommended for Vertex AI)
+   - Set `GEMINI_MODEL` = `gemini-2.5-pro`
 
 3. **Supported Models**:
-   - `gemini-2.5-flash-lite` (recommended, latest lite model)
-   - `gemini-1.5-flash`
-   - `gemini-1.5-pro`
+   - `gemini-2.5-pro` (recommended - only model available with current API key configuration)
 
 ### Updating Your API Key
 
@@ -117,15 +113,15 @@ See `.env.example` for a complete list of environment variables and examples.
 
 **Optional**:
 - `GEMINI_API_ENDPOINT` - `generativelanguage` (default) or `vertex`
-- `GEMINI_MODEL` - Model name (default: `gemini-2.5-flash-lite`)
+- `GEMINI_MODEL` - Model name (default: `gemini-2.5-pro`)
   - When set, overrides the model specified by the frontend
   - Useful for centralized model management without code changes
-  - Example: Set to `gemini-2.5-flash-lite` to use the latest lite model
+  - Allowed models: `gemini-2.5-pro` (only model available with current API key)
 - `ALLOWED_ORIGIN` - CORS allowed origins (default: `*`)
 
 **How Model Selection Works**:
 1. If `GEMINI_MODEL` environment variable is set, it always takes precedence
-2. Otherwise, the backend uses the model requested by the frontend (default: `gemini-1.5-pro`)
+2. Otherwise, the backend uses the model requested by the frontend (default: `gemini-2.5-pro`)
 3. This allows you to switch models without modifying frontend code
 
 ## Local test (no keys in client)
@@ -176,9 +172,9 @@ If you experience issues with meal plan generation:
 - Use the health-check endpoint to verify configuration
 
 **Model not found / NOT_FOUND errors**
-- The app uses "gemini-1.5-pro" which is the officially supported model name for Gemini API v1
-- This prevents 404 NOT_FOUND errors from deprecated model names like "gemini-pro" or incorrect names like "gemini-1.5-pro-001"
-- The full API endpoint is: `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent`
+- The app uses "gemini-2.5-pro" which is the only allowed model for the current API key configuration
+- This is due to API key restrictions - only gemini-2.5-pro is available
+- The full API endpoint is: `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-pro:generateContent`
 - Use test-api.html to verify model availability via the List Models feature
 - **The backend now automatically checks model availability** before making requests and provides detailed error messages with alternatives
 
@@ -189,7 +185,7 @@ If you receive a "MODEL_NOT_FOUND" or 404 error:
 1. **Check Available Models**
    - Open `test-api.html` in your browser
    - Click "List Models" to see all models available to your API key
-   - Look for `models/gemini-1.5-pro` in the list
+   - Look for `models/gemini-2.5-pro` in the list
 
 2. **Verify API Key Permissions**
    - Go to [Google AI Studio](https://aistudio.google.com/)
@@ -199,7 +195,7 @@ If you receive a "MODEL_NOT_FOUND" or 404 error:
 3. **Enable Model in Google Cloud Console**
    - Visit [Vertex AI Models](https://console.cloud.google.com/vertex-ai/generative-ai/models)
    - Ensure your project has the Gemini API enabled
-   - Check that `gemini-1.5-pro` is available in your region
+   - Check that `gemini-2.5-pro` is available in your region
    - Enable the model if it's not already activated
 
 4. **Check API Documentation**
@@ -207,10 +203,9 @@ If you receive a "MODEL_NOT_FOUND" or 404 error:
    - Verify the correct model naming convention
    - Check for any regional restrictions or availability changes
 
-5. **Use Alternative Models**
-   - If `gemini-1.5-pro` is not available, the error message will list available alternatives
-   - Consider using `models/gemini-1.5-flash` or `models/gemini-1.5-flash-8b` as fallbacks
-   - Update the model name in `js/script.js` if you need to use a different model
+5. **Note on Model Restrictions**
+   - This configuration is restricted to `gemini-2.5-pro` only due to API key limitations
+   - If `gemini-2.5-pro` is not available, contact your API key provider
 
 6. **Backend Automatic Checks**
    - The backend function now automatically verifies model availability before making API calls

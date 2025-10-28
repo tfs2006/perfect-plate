@@ -8,15 +8,13 @@ This document explains the token limits for Gemini API models and how the Perfec
 
 Most Gemini models have the following limits:
 - **Context window**: 
-  - `gemini-1.5-flash`: 8,192 tokens (combined prompt + response)
-  - `gemini-1.5-pro`: 32,768 tokens (combined prompt + response)
-  - `gemini-1.5-flash-8b`: 8,192 tokens (combined prompt + response)
-- **Input (prompt)**: Variable, but typically up to 7,000+ tokens for smaller models
+  - `gemini-2.5-pro`: 32,768 tokens (combined prompt + response) - only allowed model for current API key
+- **Input (prompt)**: Variable, but typically up to 7,000+ tokens
 - **Output (response)**: Limited by `maxOutputTokens` parameter
 
 **Important**: The `totalTokenCount` (prompt + response) must stay under the context window limit.
 
-**Note**: The app's token management is configured conservatively for 8K token limits to ensure compatibility across different model versions and avoid MAX_TOKENS errors.
+**Note**: The app's token management is configured conservatively to ensure compatibility and avoid MAX_TOKENS errors.
 
 ## How Perfect-Plate Manages Tokens
 
@@ -202,17 +200,15 @@ Different models may have different limits:
 
 | Model | Context Window | Notes |
 |-------|---------------|-------|
-| gemini-1.5-pro | 32,768 tokens | **Current default**, officially supported via Gemini API v1, optimized for structured output |
-| gemini-1.5-flash | 8,192 tokens | Fast alternative, smaller context, good for simple tasks |
-| gemini-1.5-flash-8b | 8,192 tokens | Most efficient, best for high-volume simple requests |
+| gemini-2.5-pro | 32,768 tokens | **Current default**, only allowed model for this API key configuration, optimized for structured output |
 
-**Note**: The app uses conservative token management (targeting <8K) to ensure reliability across different model versions and avoid truncation issues. Legacy model names like "gemini-pro" are no longer supported and will result in 404 NOT_FOUND errors.
+**Note**: The app uses conservative token management to ensure reliability and avoid truncation issues.
 
 **Full API Endpoint Format**: `https://generativelanguage.googleapis.com/v1/models/{model-name}:generateContent`
 
-To switch models, update the endpoint in code:
+Current model configuration:
 ```javascript
-endpoint: "gemini-1.5-flash:generateContent"  // or gemini-1.5-flash-8b
+endpoint: "gemini-2.5-pro:generateContent"
 ```
 
 ## Summary
