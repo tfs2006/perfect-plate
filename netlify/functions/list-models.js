@@ -60,7 +60,7 @@ exports.handler = async (event) => {
     // Vertex AI doesn't support list models endpoint in the same way
     if (!endpointConfig.supportsListModels) {
       console.log("[List Models] Vertex AI endpoint does not support list models");
-      const configuredModel = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
+      const configuredModel = process.env.GEMINI_MODEL || "gemini-2.5-pro";
       
       return {
         statusCode: 200,
@@ -70,9 +70,7 @@ exports.handler = async (event) => {
           endpointType: endpointConfig.type,
           configuredModel: configuredModel,
           commonModels: [
-            { name: "gemini-2.5-flash-lite", displayName: "Gemini 2.5 Flash Lite" },
-            { name: "gemini-1.5-flash", displayName: "Gemini 1.5 Flash" },
-            { name: "gemini-1.5-pro", displayName: "Gemini 1.5 Pro" }
+            { name: "gemini-2.5-pro", displayName: "Gemini 2.5 Pro" }
           ],
           message: "To verify model access, use the health-check endpoint or make a test request."
         }, null, 2)
