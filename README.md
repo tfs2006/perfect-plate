@@ -33,11 +33,12 @@ test-api.html         # diagnostic tool for API troubleshooting
    - New site → Import from Git → Pick the same repo or a fork.
    - Build cmd: _none_ ; Publish dir: `/` ; Functions dir: `netlify/functions`
    - In Netlify site → **Site settings → Environment variables**:
-     - `GEMINI_API_KEY` = `YOUR_KEY` (REQUIRED - see API Key Setup below)
-     - `GEMINI_API_ENDPOINT` = `generativelanguage` or `vertex` (OPTIONAL - defaults to `generativelanguage`)
-     - `GEMINI_MODEL` = `gemini-2.5-pro` (OPTIONAL - defaults to `gemini-2.5-pro`, only allowed model for this configuration)
+     - `GEMINI_API_KEY` = `AQ.Ab8RN6ImPUN1939eRVlvZGbsreOFBPuu_6jhBW52_LBrSTVCOg` (REQUIRED - Vertex AI key)
+     - `GEMINI_API_ENDPOINT` = `vertex` (OPTIONAL - defaults to `vertex`, use `generativelanguage` for Google AI Studio)
+     - `GEMINI_MODEL` = `gemini-2.5-pro` (OPTIONAL - defaults to `gemini-2.5-pro`)
      - `ALLOWED_ORIGIN` = `https://<you>.github.io` (OPTIONAL - defaults to `*`)
    - Deploy → copy your site URL, e.g. `https://perfect-plate-fns.netlify.app`
+   - See [NETLIFY_SETUP.md](NETLIFY_SETUP.md) for detailed setup instructions
 
 3) **Point the frontend to functions**:
    - Edit `js/config.js` and set:
@@ -48,11 +49,32 @@ test-api.html         # diagnostic tool for API troubleshooting
 
 ## API Key Setup
 
-📖 **Quick Reference**: See [API_CONFIG_GUIDE.md](API_CONFIG_GUIDE.md) for a concise setup guide with examples.
+📖 **Quick Reference**: See [NETLIFY_SETUP.md](NETLIFY_SETUP.md) for detailed Netlify configuration instructions.
 
 This application supports two Google AI API endpoints:
 
-### Option 1: Generative Language API (Google AI Studio) - Default
+### Option 1: Vertex AI (Google Cloud) - Default
+Best for production and enterprise use with more control. **This is the current default configuration.**
+
+1. **Get an API Key**:
+   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Enable the Vertex AI API for your project
+   - Create or use an API key with Vertex AI permissions (format: `AQ.Ab8...`)
+   - Current API key: `AQ.Ab8RN6ImPUN1939eRVlvZGbsreOFBPuu_6jhBW52_LBrSTVCOg`
+
+2. **Configure in Netlify**:
+   - Set `GEMINI_API_KEY` = `AQ.Ab8RN6ImPUN1939eRVlvZGbsreOFBPuu_6jhBW52_LBrSTVCOg`
+   - Set `GEMINI_API_ENDPOINT` = `vertex` (or leave unset for default)
+   - Set `GEMINI_MODEL` = `gemini-2.5-pro`
+
+3. **Supported Models**:
+   - `gemini-2.5-pro` (recommended - latest Vertex Gemini model)
+
+4. **Documentation**:
+   - [Vertex AI Inference Docs](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/inference)
+   - [Netlify Setup Guide](NETLIFY_SETUP.md)
+
+### Option 2: Generative Language API (Google AI Studio)
 Best for personal projects and quick setup.
 
 1. **Get an API Key**:
@@ -62,27 +84,12 @@ Best for personal projects and quick setup.
 
 2. **Configure in Netlify**:
    - Set `GEMINI_API_KEY` = your API key
-   - Set `GEMINI_API_ENDPOINT` = `generativelanguage` (or leave unset for default)
+   - Set `GEMINI_API_ENDPOINT` = `generativelanguage`
    - Set `GEMINI_MODEL` = `gemini-2.5-pro`
 
 3. **Supported Models**:
-   - `gemini-2.5-pro` (recommended - only model available with current API key configuration)
-
-### Option 2: Vertex AI (Google Cloud)
-Best for production and enterprise use with more control.
-
-1. **Get an API Key**:
-   - Go to [Google Cloud Console](https://console.cloud.google.com/)
-   - Enable the Vertex AI API for your project
-   - Create or use an API key with Vertex AI permissions (format: `AQ.Ab8...`)
-
-2. **Configure in Netlify**:
-   - Set `GEMINI_API_KEY` = your API key
-   - Set `GEMINI_API_ENDPOINT` = `vertex`
-   - Set `GEMINI_MODEL` = `gemini-2.5-pro`
-
-3. **Supported Models**:
-   - `gemini-2.5-pro` (recommended - only model available with current API key configuration)
+   - `gemini-2.5-pro` (recommended)
+   - See [API_CONFIG_GUIDE.md](API_CONFIG_GUIDE.md) for more details
 
 ### Updating Your API Key
 
@@ -112,11 +119,11 @@ See `.env.example` for a complete list of environment variables and examples.
 - `GEMINI_API_KEY` - Your Google AI or Vertex AI API key
 
 **Optional**:
-- `GEMINI_API_ENDPOINT` - `generativelanguage` (default) or `vertex`
+- `GEMINI_API_ENDPOINT` - `vertex` (default) or `generativelanguage`
 - `GEMINI_MODEL` - Model name (default: `gemini-2.5-pro`)
   - When set, overrides the model specified by the frontend
   - Useful for centralized model management without code changes
-  - Allowed models: `gemini-2.5-pro` (only model available with current API key)
+  - Allowed models: `gemini-2.5-pro` (latest Vertex Gemini model)
 - `ALLOWED_ORIGIN` - CORS allowed origins (default: `*`)
 
 **How Model Selection Works**:
