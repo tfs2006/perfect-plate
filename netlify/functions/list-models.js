@@ -60,7 +60,7 @@ exports.handler = async (event) => {
     // Vertex AI doesn't support list models endpoint in the same way
     if (!endpointConfig.supportsListModels) {
       console.log("[List Models] Vertex AI endpoint does not support list models");
-      const configuredModel = process.env.GEMINI_MODEL || "gemini-2.5-pro";
+      const configuredModel = process.env.GEMINI_MODEL || "gemini-2.5-flash";
       
       return {
         statusCode: 200,
