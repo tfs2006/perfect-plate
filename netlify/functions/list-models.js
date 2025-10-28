@@ -47,20 +47,16 @@ exports.handler = async (event) => {
   }
 
   try {
-    const key = process.env.GEMINI_API_KEY;
-    if (!key) {
-      return { statusCode: 500, headers: cors, body: JSON.stringify({ error: "GEMINI_API_KEY not configured" }) };
-    }
-
     // Get endpoint configuration
     const endpointConfig = getEndpointConfig();
     console.log(`[List Models] Using ${endpointConfig.type} endpoint`);
-    console.log(`[List Models] API Key: ${key.substring(0, 10)}...${key.substring(key.length - 4)}`);
 
-    // Vertex AI doesn't support list models endpoint in the same way
-    if (!endpointConfig.supportsListModels) {
-      console.log("[List Models] Vertex AI endpoint does not support list models");
+    // Check authentication based on endpoint type
+    if (endpointConfig.type === "vertex") {
+      // Vertex AI doesn't support list models endpoint
       const configuredModel = process.env.GEMINI_MODEL || "gemini-2.5-pro";
+      
+      console.log("[List Models] Vertex AI endpoint does not support list models");
       
       return {
         statusCode: 200,
@@ -69,6 +65,7 @@ exports.handler = async (event) => {
           notice: "Vertex AI endpoint does not support list models. Using configured model.",
           endpointType: endpointConfig.type,
           configuredModel: configuredModel,
+          authentication: "OAuth2 (Service Account)",
           commonModels: [
             { name: "gemini-2.5-pro", displayName: "Gemini 2.5 Pro" }
           ],
@@ -76,6 +73,14 @@ exports.handler = async (event) => {
         }, null, 2)
       };
     }
+    
+    // For Generative Language API, check API key
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) {
+      return { statusCode: 500, headers: cors, body: JSON.stringify({ error: "GEMINI_API_KEY not configured" }) };
+    }
+
+    console.log(`[List Models] API Key: ${key.substring(0, 10)}...${key.substring(key.length - 4)}`);
 
     const url = `https://generativelanguage.googleapis.com/v1/models?key=${key}`;
     console.log("[List Models] Fetching available models from Gemini API");
