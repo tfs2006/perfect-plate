@@ -1,12 +1,64 @@
 // Netlify Function: Gemini proxy with multi-origin CORS
 // Supports both Vertex AI and Generative Language API endpoints
 
+const {JWT} = require('google-auth-library');
+
 // Cache for available models (in-memory cache for serverless function)
 let modelCache = {
   models: null,
   timestamp: null,
   cacheDuration: 3600000 // 1 hour in milliseconds
 };
+
+// Cache for OAuth2 access token (in-memory cache for serverless function)
+let tokenCache = {
+  token: null,
+  expiryTime: null
+};
+
+const SCOPES = ['https://www.googleapis.com/auth/cloud-platform'];
+
+/**
+ * Generate OAuth2 access token for Vertex AI authentication using service account credentials.
+ * Caches the token until it expires to reduce auth overhead.
+ * @returns {Promise<string>} The access token
+ */
+async function getAccessToken() {
+  // Check if cached token is still valid (with 5 minute buffer)
+  if (tokenCache.token && tokenCache.expiryTime && Date.now() < tokenCache.expiryTime - 300000) {
+    console.log("[Vertex Auth] Using cached access token");
+    return tokenCache.token;
+  }
+
+  console.log("[Vertex Auth] Generating new access token");
+  
+  // Load service account credentials from environment variables
+  const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
+  const privateKey = process.env.GOOGLE_PRIVATE_KEY;
+
+  if (!clientEmail || !privateKey) {
+    throw new Error("GOOGLE_CLIENT_EMAIL and GOOGLE_PRIVATE_KEY environment variables are required for Vertex AI authentication");
+  }
+
+  // Replace literal \n with actual newlines in the private key
+  const formattedPrivateKey = privateKey.replace(/\\n/g, '\n');
+
+  const authClient = new JWT({
+    email: clientEmail,
+    key: formattedPrivateKey,
+    scopes: SCOPES
+  });
+
+  await authClient.authorize();
+  
+  // Cache the token
+  tokenCache.token = authClient.credentials.access_token;
+  tokenCache.expiryTime = authClient.credentials.expiry_date || (Date.now() + 3600000); // Default 1 hour
+  
+  console.log("[Vertex Auth] Access token generated, expires at:", new Date(tokenCache.expiryTime).toISOString());
+  
+  return tokenCache.token;
+}
 
 /**
  * Get the API endpoint configuration from environment variables.
@@ -148,13 +200,32 @@ exports.handler = async (event) => {
       return { statusCode: 400, headers: cors, body: JSON.stringify({ error: "Missing endpoint or body" }) };
     }
 
-    const key = process.env.GEMINI_API_KEY;
-    if (!key) {
-      return { statusCode: 500, headers: cors, body: JSON.stringify({ error: "GEMINI_API_KEY not configured" }) };
-    }
-
     // Get endpoint configuration
     const endpointConfig = getEndpointConfig();
+    
+    // Check authentication requirements based on endpoint type
+    if (endpointConfig.type === "vertex") {
+      // Vertex AI requires OAuth2 service account credentials
+      const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
+      const privateKey = process.env.GOOGLE_PRIVATE_KEY;
+      
+      if (!clientEmail || !privateKey) {
+        return { 
+          statusCode: 500, 
+          headers: cors, 
+          body: JSON.stringify({ 
+            error: "Vertex AI authentication not configured",
+            message: "GOOGLE_CLIENT_EMAIL and GOOGLE_PRIVATE_KEY environment variables are required for Vertex AI"
+          }) 
+        };
+      }
+    } else {
+      // Generative Language API requires API key
+      const key = process.env.GEMINI_API_KEY;
+      if (!key) {
+        return { statusCode: 500, headers: cors, body: JSON.stringify({ error: "GEMINI_API_KEY not configured" }) };
+      }
+    }
     
     // Allow environment variable to override the model
     const configuredModel = process.env.GEMINI_MODEL;
@@ -170,11 +241,22 @@ exports.handler = async (event) => {
     
     console.log(`[Gemini Proxy] Using ${endpointConfig.type} endpoint: ${endpointConfig.baseUrl}`);
     console.log(`[Gemini Proxy] Model endpoint: ${actualEndpoint}`);
-    console.log(`[Gemini Proxy] API Key: ${key.substring(0, 10)}...${key.substring(key.length - 4)}`);
+    
+    if (endpointConfig.type === "vertex") {
+      console.log(`[Gemini Proxy] Authentication: OAuth2 Bearer token (service account)`);
+    } else {
+      console.log(`[Gemini Proxy] Authentication: API Key <configured>`);
+    }
 
     // Check model availability before making the request (only for Generative Language API)
     const modelName = getModelNameFromEndpoint(actualEndpoint);
-    const modelCheck = await checkModelAvailability(key, modelName, endpointConfig);
+    
+    // Only check availability for Generative Language API (requires API key)
+    let modelCheck = { available: true, models: [], error: null };
+    if (endpointConfig.supportsListModels) {
+      const key = process.env.GEMINI_API_KEY;
+      modelCheck = await checkModelAvailability(key, modelName, endpointConfig);
+    }
     
     if (!modelCheck.available && endpointConfig.supportsListModels) {
       console.error(`[Gemini Proxy] ❌ Model '${modelName}' is NOT available`);
@@ -210,21 +292,47 @@ exports.handler = async (event) => {
     
     console.log(`[Gemini Proxy] ✅ Model '${modelName}' check passed`);
 
-    // Build the appropriate URL based on endpoint type
+    // Build the appropriate URL and headers based on endpoint type
     let url;
+    let headers = { "Content-Type": "application/json" };
+    
     if (endpointConfig.type === "vertex") {
-      // Vertex AI uses a different URL structure
-      url = `${endpointConfig.baseUrl}${actualEndpoint}?key=${key}`;
+      // Vertex AI: Use OAuth2 Bearer token, no API key in URL
+      url = `${endpointConfig.baseUrl}${actualEndpoint}`;
+      
+      try {
+        const accessToken = await getAccessToken();
+        headers["Authorization"] = `Bearer ${accessToken}`;
+        console.log("[Gemini Proxy] Using OAuth2 Bearer token for Vertex AI");
+      } catch (err) {
+        console.error("[Gemini Proxy] Failed to get access token:", err.message);
+        return { 
+          statusCode: 500, 
+          headers: cors, 
+          body: JSON.stringify({ 
+            error: "Authentication failed",
+            message: err.message
+          }) 
+        };
+      }
     } else {
-      // Generative Language API
+      // Generative Language API: Use API key in URL
+      const key = process.env.GEMINI_API_KEY;
       url = `${endpointConfig.baseUrl}${actualEndpoint}?key=${key}`;
+      console.log("[Gemini Proxy] Using API key for Generative Language API");
     }
     
     console.log("[Gemini Proxy] Calling endpoint:", actualEndpoint);
-    console.log("[Gemini Proxy] Full URL:", url.replace(key, "***KEY_HIDDEN***"));
+    // Log URL structure (sanitize any API keys for security)
+    if (endpointConfig.type === "vertex") {
+      // Vertex AI URL does not contain API key (uses Bearer token in header)
+      console.log("[Gemini Proxy] Full URL:", `${endpointConfig.baseUrl}${actualEndpoint}`);
+    } else {
+      console.log("[Gemini Proxy] Full URL: <baseUrl><endpoint>?key=***HIDDEN***");
+    }
     console.log("[Gemini Proxy] Request body keys:", Object.keys(body));
     
-    const resp = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const resp = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
     const text = await resp.text();
 
     console.log("[Gemini Proxy] Response status:", resp.status);
