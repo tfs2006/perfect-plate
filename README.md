@@ -74,14 +74,65 @@ If you experience issues with meal plan generation:
 - Check `window.API_BASE` in js/config.js points to correct URL
 - Ensure CORS is properly configured (ALLOWED_ORIGIN)
 
-**Model not found**
+**Model not found / NOT_FOUND errors**
 - The app uses "gemini-1.5-pro" which is the officially supported model name for Gemini API v1
 - This prevents 404 NOT_FOUND errors from deprecated model names like "gemini-pro" or incorrect names like "gemini-1.5-pro-001"
 - The full API endpoint is: `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent`
 - Use test-api.html to verify model availability via the List Models feature
+- **The backend now automatically checks model availability** before making requests and provides detailed error messages with alternatives
 
-## Recent Improvements (2025-10-27)
+#### Checking and Upgrading Model Access
 
+If you receive a "MODEL_NOT_FOUND" or 404 error:
+
+1. **Check Available Models**
+   - Open `test-api.html` in your browser
+   - Click "List Models" to see all models available to your API key
+   - Look for `models/gemini-1.5-pro` in the list
+
+2. **Verify API Key Permissions**
+   - Go to [Google AI Studio](https://aistudio.google.com/)
+   - Check that your API key has access to Gemini models
+   - Create a new API key if needed with proper permissions
+
+3. **Enable Model in Google Cloud Console**
+   - Visit [Vertex AI Models](https://console.cloud.google.com/vertex-ai/generative-ai/models)
+   - Ensure your project has the Gemini API enabled
+   - Check that `gemini-1.5-pro` is available in your region
+   - Enable the model if it's not already activated
+
+4. **Check API Documentation**
+   - Review the [Gemini API Models documentation](https://ai.google.dev/gemini-api/docs/models)
+   - Verify the correct model naming convention
+   - Check for any regional restrictions or availability changes
+
+5. **Use Alternative Models**
+   - If `gemini-1.5-pro` is not available, the error message will list available alternatives
+   - Consider using `models/gemini-1.5-flash` or `models/gemini-1.5-flash-8b` as fallbacks
+   - Update the model name in `js/script.js` if you need to use a different model
+
+6. **Backend Automatic Checks**
+   - The backend function now automatically verifies model availability before making API calls
+   - Check Netlify function logs for detailed model availability information
+   - The system caches model lists for 1 hour to minimize API calls
+   - Look for `[Model Check]` log entries to see what models were detected
+
+**Important Notes:**
+- Model availability depends on your Google Cloud project settings and API key permissions
+- Some models may require billing to be enabled on your Google Cloud account
+- Regional availability varies - check the Vertex AI console for your specific region
+- The backend will log all available models on first request, helping diagnose access issues
+
+## Recent Improvements
+
+**2025-10-28**
+- ✅ **Automated model availability checking** - Backend validates model access before requests
+- ✅ Smart caching of model lists to reduce API calls
+- ✅ Detailed error messages with alternative models when requested model is unavailable
+- ✅ Enhanced troubleshooting documentation for model access issues
+- ✅ Comprehensive logging for model availability diagnostics
+
+**2025-10-27**
 - ✅ Enhanced error handling with automatic retries
 - ✅ Comprehensive logging for easier debugging
 - ✅ Detection of blocked content and safety issues
