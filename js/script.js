@@ -994,8 +994,8 @@ Use different proteins/methods than existing recipes.`;
               maxOutputTokens: Math.min(adjustedMaxTokens, 600), // Reduced significantly due to thoughts tokens
               temperature,
               topP: 0.95,
-              topK: 40,
-              responseMimeType: "application/json" // Request JSON directly to reduce overhead
+              topK: 40
+              // Note: responseMimeType not supported by Generative Language API
             };
             
             console.log(`[generateBatch] Generating batch: ${daysList}`);
