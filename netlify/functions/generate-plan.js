@@ -36,7 +36,7 @@ function getEndpointConfig() {
  * Caches the list of models to avoid repeated API calls.
  * Note: Only works for Generative Language API, not Vertex AI.
  * @param {string} apiKey - The Gemini API key
- * @param {string} desiredModel - The model to check (e.g., "models/gemini-1.5-pro")
+ * @param {string} desiredModel - The model to check (e.g., "models/gemini-2.5-pro")
  * @param {object} endpointConfig - The endpoint configuration
  * @returns {Promise<{available: boolean, models: Array, error: string|null}>}
  */
@@ -112,7 +112,7 @@ async function checkModelAvailability(apiKey, desiredModel, endpointConfig) {
 
 /**
  * Extract the model name from an endpoint string.
- * E.g., "gemini-1.5-pro:generateContent" -> "models/gemini-1.5-pro"
+ * E.g., "gemini-2.5-pro:generateContent" -> "models/gemini-2.5-pro"
  */
 function getModelNameFromEndpoint(endpoint) {
   const modelPart = endpoint.split(':')[0];
@@ -161,7 +161,7 @@ exports.handler = async (event) => {
     let actualEndpoint = endpoint;
     
     if (configuredModel) {
-      // Extract the method from the original endpoint (e.g., "generateContent" from "gemini-1.5-pro:generateContent")
+      // Extract the method from the original endpoint (e.g., "generateContent" from "gemini-2.5-pro:generateContent")
       const endpointParts = endpoint.split(':');
       const method = endpointParts.length > 1 ? endpointParts[1] : 'generateContent';
       actualEndpoint = `${configuredModel}:${method}`;

@@ -58,7 +58,7 @@ exports.handler = async (event) => {
     }
 
     // Check configured model
-    const configuredModel = process.env.GEMINI_MODEL || "gemini-1.5-pro";
+    const configuredModel = process.env.GEMINI_MODEL || "gemini-2.5-pro";
     healthCheck.configuration.model = configuredModel;
 
     // If API key is configured, test it
