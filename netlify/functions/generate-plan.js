@@ -1,4 +1,5 @@
 // Netlify Function: Gemini proxy with multi-origin CORS
+// Supports both Vertex AI and Generative Language API endpoints
 
 // Cache for available models (in-memory cache for serverless function)
 let modelCache = {
@@ -8,13 +9,44 @@ let modelCache = {
 };
 
 /**
+ * Get the API endpoint configuration from environment variables.
+ * Returns the base URL and endpoint type.
+ */
+function getEndpointConfig() {
+  const endpointType = process.env.GEMINI_API_ENDPOINT || "generativelanguage";
+  
+  if (endpointType === "vertex" || endpointType === "vertexai") {
+    return {
+      type: "vertex",
+      baseUrl: "https://aiplatform.googleapis.com/v1/publishers/google/models/",
+      supportsListModels: false
+    };
+  }
+  
+  // Default to Generative Language API
+  return {
+    type: "generativelanguage",
+    baseUrl: "https://generativelanguage.googleapis.com/v1/models/",
+    supportsListModels: true
+  };
+}
+
+/**
  * Check if a specific model is available via the Gemini API.
  * Caches the list of models to avoid repeated API calls.
+ * Note: Only works for Generative Language API, not Vertex AI.
  * @param {string} apiKey - The Gemini API key
- * @param {string} desiredModel - The model to check (e.g., "models/gemini-1.5-pro")
+ * @param {string} desiredModel - The model to check (e.g., "models/gemini-2.5-flash-lite")
+ * @param {object} endpointConfig - The endpoint configuration
  * @returns {Promise<{available: boolean, models: Array, error: string|null}>}
  */
-async function checkModelAvailability(apiKey, desiredModel) {
+async function checkModelAvailability(apiKey, desiredModel, endpointConfig) {
+  // Vertex AI doesn't support list models endpoint, so we'll assume model is available
+  if (!endpointConfig.supportsListModels) {
+    console.log("[Model Check] Vertex AI endpoint - skipping model list check");
+    return { available: true, models: [], error: null };
+  }
+
   const now = Date.now();
   
   // Check if cache is valid
@@ -121,11 +153,30 @@ exports.handler = async (event) => {
       return { statusCode: 500, headers: cors, body: JSON.stringify({ error: "GEMINI_API_KEY not configured" }) };
     }
 
-    // Check model availability before making the request
-    const modelName = getModelNameFromEndpoint(endpoint);
-    const modelCheck = await checkModelAvailability(key, modelName);
+    // Get endpoint configuration
+    const endpointConfig = getEndpointConfig();
     
-    if (!modelCheck.available) {
+    // Allow environment variable to override the model
+    const configuredModel = process.env.GEMINI_MODEL;
+    let actualEndpoint = endpoint;
+    
+    if (configuredModel) {
+      // Extract the method from the original endpoint (e.g., "generateContent" from "gemini-1.5-pro:generateContent")
+      const endpointParts = endpoint.split(':');
+      const method = endpointParts.length > 1 ? endpointParts[1] : 'generateContent';
+      actualEndpoint = `${configuredModel}:${method}`;
+      console.log(`[Gemini Proxy] Model override: ${endpoint} → ${actualEndpoint}`);
+    }
+    
+    console.log(`[Gemini Proxy] Using ${endpointConfig.type} endpoint: ${endpointConfig.baseUrl}`);
+    console.log(`[Gemini Proxy] Model endpoint: ${actualEndpoint}`);
+    console.log(`[Gemini Proxy] API Key: ${key.substring(0, 10)}...${key.substring(key.length - 4)}`);
+
+    // Check model availability before making the request (only for Generative Language API)
+    const modelName = getModelNameFromEndpoint(actualEndpoint);
+    const modelCheck = await checkModelAvailability(key, modelName, endpointConfig);
+    
+    if (!modelCheck.available && endpointConfig.supportsListModels) {
       console.error(`[Gemini Proxy] ❌ Model '${modelName}' is NOT available`);
       
       // Find alternative models that support generateContent
@@ -157,10 +208,20 @@ exports.handler = async (event) => {
       return { statusCode: 404, headers: cors, body: JSON.stringify(errorMessage) };
     }
     
-    console.log(`[Gemini Proxy] ✅ Model '${modelName}' is available`);
+    console.log(`[Gemini Proxy] ✅ Model '${modelName}' check passed`);
 
-    const url = `https://generativelanguage.googleapis.com/v1/models/${endpoint}?key=${key}`;
-    console.log("[Gemini Proxy] Calling endpoint:", endpoint);
+    // Build the appropriate URL based on endpoint type
+    let url;
+    if (endpointConfig.type === "vertex") {
+      // Vertex AI uses a different URL structure
+      url = `${endpointConfig.baseUrl}${actualEndpoint}?key=${key}`;
+    } else {
+      // Generative Language API
+      url = `${endpointConfig.baseUrl}${actualEndpoint}?key=${key}`;
+    }
+    
+    console.log("[Gemini Proxy] Calling endpoint:", actualEndpoint);
+    console.log("[Gemini Proxy] Full URL:", url.replace(key, "***KEY_HIDDEN***"));
     console.log("[Gemini Proxy] Request body keys:", Object.keys(body));
     
     const resp = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
