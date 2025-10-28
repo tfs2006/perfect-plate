@@ -12,6 +12,19 @@
   const fmt = (x) => (x == null || isNaN(Number(x))) ? "-" : Number(x).toFixed(0);
   const escapeHTML = (s) => String(s).replace(/[&<>\"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", "\"":"&quot;", "'":"&#39;" }[c]));
   
+  // Rate limiting helper - add delay between requests to avoid bursts
+  const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+  let lastApiCall = 0;
+  async function throttleApiCall() {
+    const now = Date.now();
+    const timeSinceLastCall = now - lastApiCall;
+    const minInterval = 2000; // 2 seconds between calls
+    if (timeSinceLastCall < minInterval) {
+      await sleep(minInterval - timeSinceLastCall);
+    }
+    lastApiCall = Date.now();
+  }
+  
   // Normalize title for comparison (to avoid duplicates)
   function normalizeTitle(s){
     return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
@@ -271,6 +284,8 @@
 
     // ---------- API ----------
     async function secureApiCall(path, payload) {
+      await throttleApiCall(); // Add 2-second delay between API calls
+      
       const base = API_BASE || "";
       if (!base) throw new Error("No API_BASE configured. Set window.API_BASE in js/config.js to your Netlify Functions URL.");
       if (location.protocol === "https:" && /^http:\/\//i.test(base)) {
@@ -289,6 +304,13 @@
         });
         if (!res.ok) {
           const txt = await res.text().catch(() => "");
+          
+          // Special handling for rate limiting
+          if (res.status === 429) {
+            console.warn("[Rate Limit] Hit 429 TooManyRequests - pausing generation");
+            throw new Error(`RATE_LIMITED: You've reached the API rate limit. Please wait a few minutes before trying again. The free tier allows 10 requests per hour.`);
+          }
+          
           throw new Error(`API error (${res.status}): ${txt || res.statusText}`);
         }
         return res.json();
@@ -301,18 +323,15 @@
       }
     }
 
-    // ---------- Prompt (optimized for efficiency) ----------
+    // ---------- Prompt (ultra-compact for efficiency) ----------
     function buildJsonPromptRange(i, daysArray, avoidTitles = [], avoidTokens = []) {
       const daysList = daysArray.join(", ");
-      // Drastically limit avoid lists for efficiency
-      const avoidList = avoidTitles.length ? avoidTitles.slice(0, 15).join(", ") : "";
-      const avoidTok = avoidTokens.length ? avoidTokens.slice(0, 20).join(", ") : "";
+      // Limit avoid lists to prevent bloat
+      const avoid = avoidTitles.length ? avoidTitles.slice(0, 10).join(", ") : "";
 
-      return `JSON schema: {"days":[{"day":"Mon","totals":{"calories":1800,"protein":120,"carbs":180,"fat":60},"meals":[{"name":"Breakfast","items":[{"title":"Eggs & Toast","calories":350,"protein":20,"carbs":30,"fat":15,"ingredients":[{"item":"Eggs","qty":2,"unit":"large"}],"steps":["Cook eggs","Serve"]}]}]}]}
+      return `{"days":[{"day":"Mon","totals":{"calories":1800,"protein":120,"carbs":180,"fat":60},"meals":[{"name":"Breakfast","items":[{"title":"Eggs Toast","calories":350,"protein":20,"carbs":30,"fat":15,"ingredients":[{"item":"Eggs","qty":2,"unit":"large"}],"steps":["Cook","Serve"]}]}]}]}
 
-${daysList} for ${i.age}yr ${i.gender}, ${i.ethnicity}, ${i.fitnessGoal}${i.dietaryPrefs?.length ? ', '+i.dietaryPrefs.join('/') : ''}${i.exclusions ? ', no: '+i.exclusions : ''}
-
-3 meals/day (B/L/D), 1 item each. Vary proteins.${avoidList ? ' Avoid: '+avoidList : ''}${avoidTok ? ' Skip: '+avoidTok : ''}`;
+${daysList}: ${i.age}yr ${i.gender}, ${i.fitnessGoal}${i.dietaryPrefs?.length ? ', '+i.dietaryPrefs.slice(0,2).join('/') : ''}${i.exclusions ? ', no '+i.exclusions.slice(0,50) : ''}. 3 meals, 1 item each.${avoid ? ' Skip '+avoid : ''}`;
     }
 
     // ---------- JSON helpers ----------
@@ -1169,29 +1188,20 @@ Use different proteins/methods than existing recipes.`;
           // Try with progressively lower token budgets to stay within limits
           // Most Gemini models have ~8K token context (prompt + output combined)
           let planPart = await tryOnce(1200, 0.7, 1);  // Reduced from 2200
-          if (!planPart) planPart = await tryOnce(900, 0.5, 2);  // Reduced from 1600
-          if (!planPart) planPart = await tryOnce(700, 0.3, 3);  // Reduced from 1400
+          if (!planPart) planPart = await tryOnce(700, 0.3, 2);  // Reduced attempts and tokens
           return planPart;
         }
 
-        // ===== DYNAMIC BATCHING STRATEGY =====
-        // Generate days using intelligent batching: try 2-day batches first,
-        // fall back to 1-day if token estimates are too high or batches fail.
-        // This implements the recommended Gemini API approach for structured output.
+        // ===== SINGLE-DAY STRATEGY =====
+        // Generate days one at a time for better efficiency and rate limit management.
+        // Single days are more reliable and use fewer tokens than batches.
         const daysOut = [];
         const dayErrors = []; // Track errors for better diagnostics
         
         let i = 0;
         while (i < DAYS.length) {
-          const remainingDays = DAYS.length - i;
-          let daysToGenerate = [];
-          
-          // Determine batch size: try 2 days if we have 2+ remaining
-          if (remainingDays >= 2) {
-            daysToGenerate = [DAYS[i], DAYS[i + 1]];
-          } else {
-            daysToGenerate = [DAYS[i]];
-          }
+          // Always generate single days for maximum efficiency
+          const daysToGenerate = [DAYS[i]];
           
           const daysList = daysToGenerate.join(" & ");
           if (loaderText) loaderText.textContent = `Creating your plan… ${i+1}-${i+daysToGenerate.length}/7 (${daysList})`;
