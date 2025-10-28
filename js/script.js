@@ -515,11 +515,11 @@ ${daysList} for ${i.age}yr ${i.gender}, ${i.ethnicity}, ${i.fitnessGoal}${i.diet
           body: {
             contents: [{ parts: [{ text: repairPrompt }] }],
             generationConfig: {
-              maxOutputTokens: 400,  // Reduced significantly due to thoughts tokens
+              maxOutputTokens: 200,  // Very low due to thoughts taking ~600 tokens
               temperature: 0.3,
               topP: 0.95,
-              topK: 40,
-              responseMimeType: "application/json"
+              topK: 40
+              // Note: responseMimeType not supported by Generative Language API
             }
           }
         });
@@ -741,11 +741,11 @@ Use different proteins/methods than existing recipes.`;
       const body = { 
         contents: [{ parts: [{ text: prompt }] }], 
         generationConfig: {
-          maxOutputTokens: 400,  // Reduced significantly due to thoughts tokens
+          maxOutputTokens: 200,  // Very low due to thoughts taking ~600 tokens
           temperature: 0.7,
           topP: 0.95,
-          topK: 40,
-          responseMimeType: "application/json"
+          topK: 40
+          // Note: responseMimeType not supported by Generative Language API
         } 
       };
       
@@ -991,7 +991,7 @@ Use different proteins/methods than existing recipes.`;
             }
             
             const genConfig = {
-              maxOutputTokens: Math.min(adjustedMaxTokens, 600), // Reduced significantly due to thoughts tokens
+              maxOutputTokens: Math.min(adjustedMaxTokens, 200), // Very low due to thoughts taking ~600 tokens
               temperature,
               topP: 0.95,
               topK: 40
@@ -1084,11 +1084,11 @@ Use different proteins/methods than existing recipes.`;
               
               // Log exact configuration being used
               const genConfig = {
-                maxOutputTokens: Math.min(adjustedMaxTokens, 500), // Reduced significantly due to thoughts tokens
+                maxOutputTokens: Math.min(adjustedMaxTokens, 200), // Very low due to thoughts taking ~600 tokens
                 temperature,
                 topP: 0.95,
-                topK: 40,
-                responseMimeType: "application/json" // Request JSON directly to reduce overhead
+                topK: 40
+                // Note: responseMimeType not supported by Generative Language API
               };
               
               console.log(`[generateDay] Using model: gemini-2.5-flash (faster, higher rate limits)`);
@@ -1356,8 +1356,8 @@ Use different proteins/methods than existing recipes.`;
                   contents: [{ parts: [{ text: "Say 'API is working' in JSON format: {\"message\":\"API is working\"}" }] }],
                   generationConfig: { 
                     maxOutputTokens: 50, 
-                    temperature: 0.1,
-                    responseMimeType: "application/json"
+                    temperature: 0.1
+                    // Note: responseMimeType not supported by Generative Language API
                   }
                 }
               });
