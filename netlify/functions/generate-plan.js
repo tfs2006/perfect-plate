@@ -13,7 +13,7 @@ let modelCache = {
  * Returns the base URL and endpoint type.
  */
 function getEndpointConfig() {
-  const endpointType = process.env.GEMINI_API_ENDPOINT || "generativelanguage";
+  const endpointType = process.env.GEMINI_API_ENDPOINT || "vertex";
   
   if (endpointType === "vertex" || endpointType === "vertexai") {
     return {
