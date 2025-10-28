@@ -245,8 +245,7 @@ exports.handler = async (event) => {
     if (endpointConfig.type === "vertex") {
       console.log(`[Gemini Proxy] Authentication: OAuth2 Bearer token (service account)`);
     } else {
-      const key = process.env.GEMINI_API_KEY;
-      console.log(`[Gemini Proxy] Authentication: API Key ${key.substring(0, 10)}...${key.substring(key.length - 4)}`);
+      console.log(`[Gemini Proxy] Authentication: API Key <configured>`);
     }
 
     // Check model availability before making the request (only for Generative Language API)
@@ -324,7 +323,13 @@ exports.handler = async (event) => {
     }
     
     console.log("[Gemini Proxy] Calling endpoint:", actualEndpoint);
-    console.log("[Gemini Proxy] Full URL:", url.replace(/key=[^&]+/, "key=***KEY_HIDDEN***"));
+    // Log URL structure (sanitize any API keys for security)
+    if (endpointConfig.type === "vertex") {
+      // Vertex AI URL does not contain API key (uses Bearer token in header)
+      console.log("[Gemini Proxy] Full URL:", `${endpointConfig.baseUrl}${actualEndpoint}`);
+    } else {
+      console.log("[Gemini Proxy] Full URL: <baseUrl><endpoint>?key=***HIDDEN***");
+    }
     console.log("[Gemini Proxy] Request body keys:", Object.keys(body));
     
     const resp = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });

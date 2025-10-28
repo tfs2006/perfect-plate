@@ -80,7 +80,7 @@ exports.handler = async (event) => {
       return { statusCode: 500, headers: cors, body: JSON.stringify({ error: "GEMINI_API_KEY not configured" }) };
     }
 
-    console.log(`[List Models] API Key: ${key.substring(0, 10)}...${key.substring(key.length - 4)}`);
+    console.log(`[List Models] API Key: <configured>`);
 
     const url = `https://generativelanguage.googleapis.com/v1/models?key=${key}`;
     console.log("[List Models] Fetching available models from Gemini API");
