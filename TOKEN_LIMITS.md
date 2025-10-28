@@ -10,7 +10,7 @@ Most Gemini models have the following limits:
 - **Context window**: 
   - `gemini-1.5-flash`: 8,192 tokens (combined prompt + response)
   - `gemini-1.5-pro`: 32,768 tokens (combined prompt + response)
-  - `gemini-pro`: ~30,000 tokens (combined prompt + response)
+  - `gemini-1.5-flash-8b`: 8,192 tokens (combined prompt + response)
 - **Input (prompt)**: Variable, but typically up to 7,000+ tokens for smaller models
 - **Output (response)**: Limited by `maxOutputTokens` parameter
 
@@ -202,15 +202,17 @@ Different models may have different limits:
 
 | Model | Context Window | Notes |
 |-------|---------------|-------|
-| gemini-pro | ~30,000 tokens | **Current default**, optimized for structured output, larger context than flash models |
-| gemini-1.5-flash | 8,192 tokens | Fast alternative, smaller context |
-| gemini-1.5-pro | 32,768 tokens | Larger context, slower |
+| gemini-1.5-pro | 32,768 tokens | **Current default**, officially supported via Gemini API v1, optimized for structured output |
+| gemini-1.5-flash | 8,192 tokens | Fast alternative, smaller context, good for simple tasks |
+| gemini-1.5-flash-8b | 8,192 tokens | Most efficient, best for high-volume simple requests |
 
-**Note**: The app uses conservative token management (targeting <8K) to ensure reliability across different model versions and avoid truncation issues.
+**Note**: The app uses conservative token management (targeting <8K) to ensure reliability across different model versions and avoid truncation issues. Legacy model names like "gemini-pro" are no longer supported and will result in 404 NOT_FOUND errors.
+
+**Full API Endpoint Format**: `https://generativelanguage.googleapis.com/v1/models/{model-name}:generateContent`
 
 To switch models, update the endpoint in code:
 ```javascript
-endpoint: "gemini-1.5-flash:generateContent"  // or gemini-1.5-pro
+endpoint: "gemini-1.5-flash:generateContent"  // or gemini-1.5-flash-8b
 ```
 
 ## Summary

@@ -213,7 +213,7 @@ async function generateBatch(daysArray, maxTokens, temperature) {
   
   // Generate with adjusted parameters
   const resp = await secureApiCall("generate-plan", {
-    endpoint: "gemini-pro:generateContent",
+    endpoint: "gemini-1.5-pro:generateContent",
     body: { contents: [...], generationConfig: { maxOutputTokens: adjustedMaxTokens, ... } }
   });
   
@@ -284,7 +284,7 @@ if (!daysOut.length) {
     
     // Test API connectivity
     const testResp = await secureApiCall("generate-plan", {
-      endpoint: "gemini-pro:generateContent",
+      endpoint: "gemini-1.5-pro:generateContent",
       body: { contents: [{ parts: [{ text: "Test" }] }], generationConfig: { ... } }
     });
     

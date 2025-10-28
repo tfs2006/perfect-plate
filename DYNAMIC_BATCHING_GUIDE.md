@@ -338,7 +338,7 @@ All scenarios maintain large safety buffers (>75% remaining capacity).
 ### Backend Console Logs (Netlify Functions)
 
 ```
-[Gemini Proxy] Calling endpoint: gemini-pro:generateContent
+[Gemini Proxy] Calling endpoint: gemini-1.5-pro:generateContent
 [Gemini Proxy] Response status: 200
 [Gemini Proxy] Token usage (actual): {
   promptTokenCount: 230,

@@ -91,7 +91,14 @@
   </div>
 
   <div class="test-section">
-    <h2>4. Model Availability Test</h2>
+    <h2>4. List Available Models</h2>
+    <p>Queries the Gemini API to list all available models and their capabilities.</p>
+    <button id="test-list-models">List Models</button>
+    <div id="list-models-result"></div>
+  </div>
+
+  <div class="test-section">
+    <h2>5. Model Availability Test</h2>
     <p>Tests different model names to see which ones work.</p>
     <button id="test-models">Test Models</button>
     <div id="models-result"></div>
@@ -190,7 +197,7 @@
       showResult('simple-result', 'warning', '⏳ Testing...');
       
       try {
-        const response = await callAPI('gemini-pro:generateContent', {
+        const response = await callAPI('gemini-1.5-pro:generateContent', {
           contents: [{ parts: [{ text: "Say hello" }] }],
           generationConfig: { maxOutputTokens: 50, temperature: 0.1 }
         });
@@ -222,7 +229,7 @@
       showResult('json-result', 'warning', '⏳ Testing...');
       
       try {
-        const response = await callAPI('gemini-pro:generateContent', {
+        const response = await callAPI('gemini-1.5-pro:generateContent', {
           contents: [{ parts: [{ text: 'Return JSON only: {"greeting":"hello","number":42}' }] }],
           generationConfig: { maxOutputTokens: 100, temperature: 0.1 }
         });
@@ -280,7 +287,7 @@
 Generate one day (Monday) with breakfast only for a 30-year-old male seeking weight loss.`;
       
       try {
-        const response = await callAPI('gemini-pro:generateContent', {
+        const response = await callAPI('gemini-1.5-pro:generateContent', {
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: { maxOutputTokens: 1200, temperature: 0.5 }
         });
@@ -312,15 +319,55 @@ Generate one day (Monday) with breakfast only for a 30-year-old male seeking wei
       }
     });
 
+    document.getElementById('test-list-models').addEventListener('click', async function() {
+      const btn = this;
+      btn.disabled = true;
+      showResult('list-models-result', 'warning', '⏳ Fetching available models...');
+      
+      try {
+        if (!API_BASE) {
+          throw new Error("API_BASE not configured in js/config.js");
+        }
+        
+        const url = `${API_BASE}/list-models`;
+        console.log("Calling:", url);
+        
+        const response = await fetch(url, {
+          method: "GET",
+          mode: "cors",
+          credentials: "omit"
+        });
+        
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(`API error (${response.status}): ${text}`);
+        }
+        
+        const data = await response.json();
+        
+        let message = `✅ Found ${data.allModels.length} total models, ${data.generateContentModels.length} support generateContent\n\n`;
+        message += `Models supporting generateContent:\n`;
+        data.generateContentModels.forEach(m => {
+          message += `  • ${m.name} (${m.displayName})\n`;
+        });
+        
+        showResult('list-models-result', 'success', message, data);
+      } catch (e) {
+        showResult('list-models-result', 'error', `❌ Error: ${e.message}`);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
     document.getElementById('test-models').addEventListener('click', async function() {
       const btn = this;
       btn.disabled = true;
       showResult('models-result', 'warning', '⏳ Testing multiple models...');
       
       const models = [
-        'gemini-pro:generateContent',
+        'gemini-1.5-pro:generateContent',
         'gemini-1.5-flash:generateContent',
-        'gemini-1.5-pro:generateContent'
+        'gemini-1.5-flash-8b:generateContent'
       ];
       
       const results = [];
