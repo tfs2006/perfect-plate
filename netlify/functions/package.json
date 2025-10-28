@@ -1,0 +1,24 @@
+{
+  "name": "perfect-plate-netlify-functions",
+  "version": "1.0.0",
+  "description": "Netlify Functions for Perfect Plate app",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "google-auth-library": "^9.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "netlify",
+    "functions",
+    "google",
+    "gemini",
+    "ai"
+  ],
+  "author": "",
+  "license": "ISC"
+}
