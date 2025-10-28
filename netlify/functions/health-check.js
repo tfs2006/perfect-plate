@@ -1,6 +1,41 @@
 // Netlify Function: Health check for Gemini API configuration
 // This endpoint verifies API key, endpoint, and model availability
 
+const {JWT} = require('google-auth-library');
+
+const SCOPES = ['https://www.googleapis.com/auth/cloud-platform'];
+
+/**
+ * Generate OAuth2 access token for Vertex AI authentication using service account credentials.
+ * @returns {Promise<string>} The access token
+ */
+async function getAccessToken() {
+  console.log("[Health Check Auth] Generating access token");
+  
+  // Load service account credentials from environment variables
+  const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
+  const privateKey = process.env.GOOGLE_PRIVATE_KEY;
+
+  if (!clientEmail || !privateKey) {
+    throw new Error("GOOGLE_CLIENT_EMAIL and GOOGLE_PRIVATE_KEY environment variables are required for Vertex AI authentication");
+  }
+
+  // Replace literal \n with actual newlines in the private key
+  const formattedPrivateKey = privateKey.replace(/\\n/g, '\n');
+
+  const authClient = new JWT({
+    email: clientEmail,
+    key: formattedPrivateKey,
+    scopes: SCOPES
+  });
+
+  await authClient.authorize();
+  
+  console.log("[Health Check Auth] Access token generated");
+  
+  return authClient.credentials.access_token;
+}
+
 exports.handler = async (event) => {
   const originsEnv = process.env.ALLOWED_ORIGIN || "*";
   const allowedList = originsEnv.split(",").map(s => s.trim()).filter(Boolean);
@@ -34,17 +69,7 @@ exports.handler = async (event) => {
   };
 
   try {
-    // Check API key
-    const key = process.env.GEMINI_API_KEY;
-    if (!key) {
-      healthCheck.status = "error";
-      healthCheck.errors.push("GEMINI_API_KEY environment variable is not set");
-      healthCheck.configuration.apiKey = "NOT_CONFIGURED";
-    } else {
-      healthCheck.configuration.apiKey = `${key.substring(0, 10)}...${key.substring(key.length - 4)}`;
-    }
-
-    // Check endpoint configuration
+    // Check endpoint configuration first
     const endpointType = process.env.GEMINI_API_ENDPOINT || "vertex";
     healthCheck.configuration.endpointType = endpointType;
     
@@ -52,40 +77,60 @@ exports.handler = async (event) => {
     if (endpointType === "vertex") {
       baseUrl = "https://aiplatform.googleapis.com/v1/publishers/google/models/";
       healthCheck.configuration.baseUrl = baseUrl;
+      
+      // Check Vertex AI service account credentials
+      const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
+      const privateKey = process.env.GOOGLE_PRIVATE_KEY;
+      
+      if (!clientEmail) {
+        healthCheck.status = "error";
+        healthCheck.errors.push("GOOGLE_CLIENT_EMAIL environment variable is not set");
+        healthCheck.configuration.authentication = "NOT_CONFIGURED";
+      } else if (!privateKey) {
+        healthCheck.status = "error";
+        healthCheck.errors.push("GOOGLE_PRIVATE_KEY environment variable is not set");
+        healthCheck.configuration.authentication = "NOT_CONFIGURED";
+      } else {
+        healthCheck.configuration.authentication = "OAuth2 (Service Account)";
+        healthCheck.configuration.serviceAccount = clientEmail;
+      }
     } else {
       baseUrl = "https://generativelanguage.googleapis.com/v1/models/";
       healthCheck.configuration.baseUrl = baseUrl;
+      
+      // Check API key for Generative Language API
+      const key = process.env.GEMINI_API_KEY;
+      if (!key) {
+        healthCheck.status = "error";
+        healthCheck.errors.push("GEMINI_API_KEY environment variable is not set");
+        healthCheck.configuration.authentication = "NOT_CONFIGURED";
+      } else {
+        healthCheck.configuration.authentication = "API Key";
+        healthCheck.configuration.apiKey = `${key.substring(0, 10)}...${key.substring(key.length - 4)}`;
+      }
     }
 
     // Check configured model
     const configuredModel = process.env.GEMINI_MODEL || "gemini-2.5-pro";
     healthCheck.configuration.model = configuredModel;
 
-    // If API key is configured, test it
-    if (key) {
+    // Test API connectivity if credentials are configured
+    const isVertexConfigured = endpointType === "vertex" && process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY;
+    const isGenLangConfigured = endpointType !== "vertex" && process.env.GEMINI_API_KEY;
+    
+    if (isVertexConfigured || isGenLangConfigured) {
       console.log("[Health Check] Testing API connectivity...");
       console.log("[Health Check] Endpoint type:", endpointType);
       console.log("[Health Check] Base URL:", baseUrl);
-      console.log("[Health Check] API Key:", healthCheck.configuration.apiKey);
 
       try {
-        // Test model listing endpoint
-        let listUrl;
-        if (endpointType === "vertex") {
-          // Vertex AI doesn't have a simple list models endpoint in the same way
-          // We'll test by attempting to call the model directly
-          listUrl = `${baseUrl}${configuredModel}:streamGenerateContent?key=${key}`;
-          healthCheck.tests.modelListEndpoint = "N/A (Vertex AI)";
-          healthCheck.warnings.push("Vertex AI does not support list models endpoint - testing direct model access instead");
-        } else {
-          listUrl = `https://generativelanguage.googleapis.com/v1/models?key=${key}`;
-          healthCheck.tests.modelListEndpoint = listUrl;
-        }
-
         // For Vertex AI, test direct model access; for Generative Language, list models
         if (endpointType === "vertex") {
-          // Test with a simple prompt for Vertex AI
-          const testUrl = `${baseUrl}${configuredModel}:streamGenerateContent?key=${key}`;
+          healthCheck.tests.modelListEndpoint = "N/A (Vertex AI)";
+          healthCheck.warnings.push("Vertex AI does not support list models endpoint - testing direct model access instead");
+          
+          // Test with a simple prompt for Vertex AI using OAuth2
+          const testUrl = `${baseUrl}${configuredModel}:streamGenerateContent`;
           const testBody = {
             contents: [{
               parts: [{ text: "Say 'OK' if you can read this." }]
@@ -96,10 +141,35 @@ exports.handler = async (event) => {
             }
           };
 
-          console.log("[Health Check] Testing Vertex AI model access:", testUrl);
+          console.log("[Health Check] Testing Vertex AI model access with OAuth2:", testUrl);
+          
+          let accessToken;
+          try {
+            accessToken = await getAccessToken();
+            console.log("[Health Check] Successfully generated access token");
+          } catch (authErr) {
+            healthCheck.tests.vertexModelAccess = `AUTH_FAILED: ${authErr.message}`;
+            healthCheck.tests.modelAvailable = false;
+            healthCheck.errors.push(`Failed to generate access token: ${authErr.message}`);
+            console.error("[Health Check] ❌ Access token generation failed:", authErr.message);
+            
+            // Don't continue with API test if auth failed
+            if (healthCheck.errors.length === 0) {
+              healthCheck.status = "warning";
+            }
+            return {
+              statusCode: 200,
+              headers: cors,
+              body: JSON.stringify(healthCheck, null, 2)
+            };
+          }
+          
           const testResp = await fetch(testUrl, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { 
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${accessToken}`
+            },
             body: JSON.stringify(testBody)
           });
 
@@ -116,6 +186,10 @@ exports.handler = async (event) => {
           }
         } else {
           // Test model listing for Generative Language API
+          const key = process.env.GEMINI_API_KEY;
+          const listUrl = `https://generativelanguage.googleapis.com/v1/models?key=${key}`;
+          healthCheck.tests.modelListEndpoint = listUrl.replace(key, "***KEY_HIDDEN***");
+          
           const listResp = await fetch(listUrl, { method: "GET" });
 
           if (!listResp.ok) {
@@ -172,7 +246,7 @@ exports.handler = async (event) => {
         console.error("[Health Check] Exception during API test:", err);
       }
     } else {
-      healthCheck.tests.apiConnectivity = "SKIPPED (no API key)";
+      healthCheck.tests.apiConnectivity = "SKIPPED (authentication not configured)";
     }
 
     // Determine final status
