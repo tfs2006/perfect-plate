@@ -45,7 +45,7 @@ exports.handler = async (event) => {
     }
 
     // Check endpoint configuration
-    const endpointType = process.env.GEMINI_API_ENDPOINT || "vertex";
+    const endpointType = process.env.GEMINI_API_ENDPOINT || "generativelanguage";
     healthCheck.configuration.endpointType = endpointType;
     
     let baseUrl;
