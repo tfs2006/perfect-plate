@@ -56,22 +56,33 @@ This application supports two Google AI API endpoints:
 ### Option 1: Vertex AI (Google Cloud) - Default
 Best for production and enterprise use with more control. **This is the current default configuration.**
 
-1. **Get an API Key**:
-   - Go to [Google Cloud Console](https://console.cloud.google.com/)
-   - Enable the Vertex AI API for your project
-   - Create or use an API key with Vertex AI permissions (format: `AQ.Ab8...`)
-   - Current API key: `AQ.Ab8RN6ImPUN1939eRVlvZGbsreOFBPuu_6jhBW52_LBrSTVCOg`
+**Authentication**: Uses OAuth2 with service account credentials (no API key in URLs)
 
-2. **Configure in Netlify**:
-   - Set `GEMINI_API_KEY` = `AQ.Ab8RN6ImPUN1939eRVlvZGbsreOFBPuu_6jhBW52_LBrSTVCOg`
+1. **Create a Service Account**:
+   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Navigate to IAM & Admin → Service Accounts
+   - Click "Create Service Account"
+   - Give it a name and the "Vertex AI User" role
+   - Create a JSON key for the service account
+   - Download the JSON key file
+
+2. **Extract Credentials from JSON**:
+   - Open the downloaded JSON file
+   - Copy the `client_email` value
+   - Copy the `private_key` value (keep the `\n` characters as literal text)
+
+3. **Configure in Netlify**:
+   - Set `GOOGLE_CLIENT_EMAIL` = (the client_email from JSON)
+   - Set `GOOGLE_PRIVATE_KEY` = (the private_key from JSON, with literal \n)
    - Set `GEMINI_API_ENDPOINT` = `vertex` (or leave unset for default)
    - Set `GEMINI_MODEL` = `gemini-2.5-pro`
 
-3. **Supported Models**:
+4. **Supported Models**:
    - `gemini-2.5-pro` (recommended - latest Vertex Gemini model)
 
-4. **Documentation**:
+5. **Documentation**:
    - [Vertex AI Inference Docs](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/inference)
+   - [Google Cloud Authentication](https://cloud.google.com/docs/authentication/getting-started)
    - [Netlify Setup Guide](NETLIFY_SETUP.md)
 
 ### Option 2: Generative Language API (Google AI Studio)
@@ -91,18 +102,19 @@ Best for personal projects and quick setup.
    - `gemini-2.5-pro` (recommended)
    - See [API_CONFIG_GUIDE.md](API_CONFIG_GUIDE.md) for more details
 
-### Updating Your API Key
+### Updating Your Configuration
 
-To update your API key:
+To update your configuration:
 
 1. **In Netlify Dashboard**:
    - Go to: Site settings → Environment variables
-   - Find `GEMINI_API_KEY` and click "Edit"
-   - Update the value and save
+   - For Vertex AI: Update `GOOGLE_CLIENT_EMAIL` and `GOOGLE_PRIVATE_KEY`
+   - For Generative Language API: Update `GEMINI_API_KEY`
    - Trigger a new deploy (or wait for next deploy)
 
 2. **To Switch Between Endpoints**:
    - Update `GEMINI_API_ENDPOINT` to either `generativelanguage` or `vertex`
+   - Configure appropriate credentials for the chosen endpoint
    - Update `GEMINI_MODEL` to a compatible model for that endpoint
    - Redeploy your site
 
@@ -115,8 +127,12 @@ To update your API key:
 
 See `.env.example` for a complete list of environment variables and examples.
 
-**Required**:
-- `GEMINI_API_KEY` - Your Google AI or Vertex AI API key
+**For Vertex AI (OAuth2 Authentication)**:
+- `GOOGLE_CLIENT_EMAIL` - Service account email from JSON key file
+- `GOOGLE_PRIVATE_KEY` - Service account private key from JSON key file
+
+**For Generative Language API (API Key Authentication)**:
+- `GEMINI_API_KEY` - Your Google AI Studio API key
 
 **Optional**:
 - `GEMINI_API_ENDPOINT` - `vertex` (default) or `generativelanguage`
@@ -125,6 +141,10 @@ See `.env.example` for a complete list of environment variables and examples.
   - Useful for centralized model management without code changes
   - Allowed models: `gemini-2.5-pro` (latest Vertex Gemini model)
 - `ALLOWED_ORIGIN` - CORS allowed origins (default: `*`)
+
+**Authentication Summary**:
+- **Vertex AI**: Uses OAuth2 Bearer tokens (no API key in URLs, more secure)
+- **Generative Language API**: Uses API key in URL query parameters
 
 **How Model Selection Works**:
 1. If `GEMINI_MODEL` environment variable is set, it always takes precedence
@@ -141,7 +161,7 @@ If you experience issues with meal plan generation:
 1. **Check the health check endpoint** first:
    - Visit: `https://your-site.netlify.app/.netlify/functions/health-check`
    - This will verify:
-     - API key is configured
+     - Authentication configuration (OAuth2 for Vertex AI, API key for Generative Language)
      - Endpoint type (Generative Language or Vertex AI)
      - Model availability
      - API connectivity
