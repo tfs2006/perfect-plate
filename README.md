@@ -116,7 +116,15 @@ See `.env.example` for a complete list of environment variables and examples.
 **Optional**:
 - `GEMINI_API_ENDPOINT` - `generativelanguage` (default) or `vertex`
 - `GEMINI_MODEL` - Model name (default: `gemini-2.5-flash-lite`)
+  - When set, overrides the model specified by the frontend
+  - Useful for centralized model management without code changes
+  - Example: Set to `gemini-2.5-flash-lite` to use the latest lite model
 - `ALLOWED_ORIGIN` - CORS allowed origins (default: `*`)
+
+**How Model Selection Works**:
+1. If `GEMINI_MODEL` environment variable is set, it always takes precedence
+2. Otherwise, the backend uses the model requested by the frontend (default: `gemini-1.5-pro`)
+3. This allows you to switch models without modifying frontend code
 
 ## Local test (no keys in client)
 You can run a simple static server (e.g., `npx http-server .`) but the app still needs the deployed Netlify function to work.

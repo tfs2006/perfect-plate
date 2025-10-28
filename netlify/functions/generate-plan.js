@@ -155,11 +155,25 @@ exports.handler = async (event) => {
 
     // Get endpoint configuration
     const endpointConfig = getEndpointConfig();
+    
+    // Allow environment variable to override the model
+    const configuredModel = process.env.GEMINI_MODEL;
+    let actualEndpoint = endpoint;
+    
+    if (configuredModel) {
+      // Extract the method from the original endpoint (e.g., "generateContent" from "gemini-1.5-pro:generateContent")
+      const endpointParts = endpoint.split(':');
+      const method = endpointParts.length > 1 ? endpointParts[1] : 'generateContent';
+      actualEndpoint = `${configuredModel}:${method}`;
+      console.log(`[Gemini Proxy] Model override: ${endpoint} → ${actualEndpoint}`);
+    }
+    
     console.log(`[Gemini Proxy] Using ${endpointConfig.type} endpoint: ${endpointConfig.baseUrl}`);
+    console.log(`[Gemini Proxy] Model endpoint: ${actualEndpoint}`);
     console.log(`[Gemini Proxy] API Key: ${key.substring(0, 10)}...${key.substring(key.length - 4)}`);
 
     // Check model availability before making the request (only for Generative Language API)
-    const modelName = getModelNameFromEndpoint(endpoint);
+    const modelName = getModelNameFromEndpoint(actualEndpoint);
     const modelCheck = await checkModelAvailability(key, modelName, endpointConfig);
     
     if (!modelCheck.available && endpointConfig.supportsListModels) {
@@ -200,13 +214,13 @@ exports.handler = async (event) => {
     let url;
     if (endpointConfig.type === "vertex") {
       // Vertex AI uses a different URL structure
-      url = `${endpointConfig.baseUrl}${endpoint}?key=${key}`;
+      url = `${endpointConfig.baseUrl}${actualEndpoint}?key=${key}`;
     } else {
       // Generative Language API
-      url = `${endpointConfig.baseUrl}${endpoint}?key=${key}`;
+      url = `${endpointConfig.baseUrl}${actualEndpoint}?key=${key}`;
     }
     
-    console.log("[Gemini Proxy] Calling endpoint:", endpoint);
+    console.log("[Gemini Proxy] Calling endpoint:", actualEndpoint);
     console.log("[Gemini Proxy] Full URL:", url.replace(key, "***KEY_HIDDEN***"));
     console.log("[Gemini Proxy] Request body keys:", Object.keys(body));
     
