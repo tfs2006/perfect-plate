@@ -129,21 +129,23 @@ Look for these indicators in the response:
 ## Common Solutions
 
 ### Solution 1: Model Name Configuration
-The code now uses `models/gemini-1.5-pro` which is the officially supported model for Gemini API v1.
+The code now uses `gemini-1.5-pro` which is the officially supported model for Gemini API v1.
 
-**Current model:** `models/gemini-1.5-pro` (officially supported, optimized for structured JSON output)
+**Current model:** `gemini-1.5-pro` (officially supported, optimized for structured JSON output)
 **Alternative models if needed:**
-- Try `models/gemini-1.5-flash` (faster, smaller context window but good for simple tasks)
-- Try `models/gemini-1.5-flash-8b` (most efficient for high-volume simple requests)
+- Try `gemini-1.5-flash` (faster, smaller context window but good for simple tasks)
+- Try `gemini-1.5-flash-8b` (most efficient for high-volume simple requests)
 
 **Important:** Legacy model names like "gemini-pro" are no longer supported and will result in 404 NOT_FOUND errors.
+
+**Full API Endpoint**: `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent`
 
 **How to update (if needed):**
 ```javascript
 // Current implementation uses:
-endpoint: "models/gemini-1.5-pro:generateContent"
+endpoint: "gemini-1.5-pro:generateContent"
 // To try alternatives, replace with:
-endpoint: "models/gemini-1.5-flash:generateContent"
+endpoint: "gemini-1.5-flash:generateContent"
 ```
 
 ### Solution 2: maxOutputTokens Too High

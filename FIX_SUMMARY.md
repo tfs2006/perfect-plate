@@ -162,9 +162,9 @@ Each check provides a specific log message, making it easy to identify exactly w
 **Solution:** Simplify prompt, reduce avoid lists
 
 ### Issue: Model endpoint configuration
-**Updated:** Now uses "models/gemini-1.5-pro" which is the officially supported model for Gemini API v1  
+**Updated:** Now uses "gemini-1.5-pro" which is the officially supported model for Gemini API v1  
 **Benefit:** Prevents 404 NOT_FOUND errors from deprecated model names like "gemini-pro"  
-**Alternatives:** Can try "models/gemini-1.5-flash" or "models/gemini-1.5-flash-8b" if needed
+**Alternatives:** Can try "gemini-1.5-flash" or "gemini-1.5-flash-8b" if needed
 
 ## Benefits
 
