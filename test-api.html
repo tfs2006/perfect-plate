@@ -197,7 +197,7 @@
       showResult('simple-result', 'warning', '⏳ Testing...');
       
       try {
-        const response = await callAPI('gemini-1.5-pro-001:generateContent', {
+        const response = await callAPI('gemini-1.5-pro:generateContent', {
           contents: [{ parts: [{ text: "Say hello" }] }],
           generationConfig: { maxOutputTokens: 50, temperature: 0.1 }
         });
@@ -229,7 +229,7 @@
       showResult('json-result', 'warning', '⏳ Testing...');
       
       try {
-        const response = await callAPI('gemini-1.5-pro-001:generateContent', {
+        const response = await callAPI('gemini-1.5-pro:generateContent', {
           contents: [{ parts: [{ text: 'Return JSON only: {"greeting":"hello","number":42}' }] }],
           generationConfig: { maxOutputTokens: 100, temperature: 0.1 }
         });
@@ -287,7 +287,7 @@
 Generate one day (Monday) with breakfast only for a 30-year-old male seeking weight loss.`;
       
       try {
-        const response = await callAPI('gemini-1.5-pro-001:generateContent', {
+        const response = await callAPI('gemini-1.5-pro:generateContent', {
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: { maxOutputTokens: 1200, temperature: 0.5 }
         });
@@ -365,9 +365,9 @@ Generate one day (Monday) with breakfast only for a 30-year-old male seeking wei
       showResult('models-result', 'warning', '⏳ Testing multiple models...');
       
       const models = [
-        'gemini-1.5-pro-001:generateContent',
-        'gemini-1.5-flash-001:generateContent',
-        'gemini-1.5-flash-8b-001:generateContent'
+        'gemini-1.5-pro:generateContent',
+        'gemini-1.5-flash:generateContent',
+        'gemini-1.5-flash-8b:generateContent'
       ];
       
       const results = [];
