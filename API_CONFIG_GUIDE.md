@@ -8,7 +8,7 @@ This guide provides quick instructions for configuring the Perfect-Plate Gemini 
 
 ```bash
 # In Netlify Dashboard → Site Settings → Environment Variables, set:
-GEMINI_API_KEY=AQ.Ab8RN6ImPUN1939eRVlvZGbsreOFBPuu_6jhBW52_LBrSTVCOg
+GEMINI_API_KEY=AQ.YOUR_VERTEX_AI_KEY_HERE
 GEMINI_API_ENDPOINT=vertex
 GEMINI_MODEL=gemini-2.5-flash-lite
 ```
@@ -118,7 +118,7 @@ Visit: `https://your-site.netlify.app/.netlify/functions/list-models`
 
 ```bash
 # Update these environment variables in Netlify:
-GEMINI_API_KEY=AQ.Ab8RN6ImPUN1939eRVlvZGbsreOFBPuu_6jhBW52_LBrSTVCOg  # New Vertex key
+GEMINI_API_KEY=AQ.YOUR_VERTEX_AI_KEY_HERE  # New Vertex key
 GEMINI_API_ENDPOINT=vertex  # Change from generativelanguage to vertex
 GEMINI_MODEL=gemini-2.5-flash-lite  # Use Vertex-compatible model
 ```
@@ -185,7 +185,7 @@ This means you can switch models without touching the frontend code.
 
 ### Configuration 1: Vertex AI with latest model
 ```bash
-GEMINI_API_KEY=AQ.Ab8RN6ImPUN1939eRVlvZGbsreOFBPuu_6jhBW52_LBrSTVCOg
+GEMINI_API_KEY=AQ.YOUR_VERTEX_AI_KEY_HERE
 GEMINI_API_ENDPOINT=vertex
 GEMINI_MODEL=gemini-2.5-flash-lite
 ALLOWED_ORIGIN=https://yourusername.github.io

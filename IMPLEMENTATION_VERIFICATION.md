@@ -8,7 +8,7 @@ All required changes for Gemini API key update and Vertex AI endpoint support ha
 ## ✅ Completed Requirements
 
 ### 1. Environment Variable Configuration
-- ✅ **GEMINI_API_KEY**: Supports both Vertex AI (`AQ.Ab8...`) and Generative Language (`AIzaSy...`) API keys
+- ✅ **GEMINI_API_KEY**: Supports both Vertex AI (`AQ.****...****`) and Generative Language (`AIzaSy****...****`) API keys
 - ✅ **GEMINI_API_ENDPOINT**: Allows switching between `vertex` and `generativelanguage` (default)
 - ✅ **GEMINI_MODEL**: Overrides frontend model selection (default: `gemini-2.5-flash-lite`)
 - ✅ **ALLOWED_ORIGIN**: CORS configuration support
@@ -120,7 +120,7 @@ All required changes for Gemini API key update and Vertex AI endpoint support ha
 ### Example 1: Use New Vertex AI Key with gemini-2.5-flash-lite
 Set in Netlify environment variables:
 ```
-GEMINI_API_KEY=AQ.Ab8RN6ImPUN1939eRVlvZGbsreOFBPuu_6jhBW52_LBrSTVCOg
+GEMINI_API_KEY=AQ.YOUR_VERTEX_AI_KEY_HERE
 GEMINI_API_ENDPOINT=vertex
 GEMINI_MODEL=gemini-2.5-flash-lite
 ```
@@ -129,13 +129,13 @@ Expected log output:
 ```
 [Gemini Proxy] Using vertex endpoint: https://aiplatform.googleapis.com/v1/publishers/google/models/
 [Gemini Proxy] Model endpoint: gemini-2.5-flash-lite:generateContent
-[Gemini Proxy] API Key: AQ.Ab8RN6I...COg
+[Gemini Proxy] API Key: AQ.YOUR_VE...HERE
 ```
 
 ### Example 2: Use Generative Language API with gemini-1.5-pro
 Set in Netlify environment variables:
 ```
-GEMINI_API_KEY=AIzaSyC...your_key
+GEMINI_API_KEY=AIzaSyYOUR_GENERATIVE_LANGUAGE_KEY
 GEMINI_API_ENDPOINT=generativelanguage
 GEMINI_MODEL=gemini-1.5-pro
 ```
@@ -144,7 +144,7 @@ Expected log output:
 ```
 [Gemini Proxy] Using generativelanguage endpoint: https://generativelanguage.googleapis.com/v1/models/
 [Gemini Proxy] Model endpoint: gemini-1.5-pro:generateContent
-[Gemini Proxy] API Key: AIzaSyC...key
+[Gemini Proxy] API Key: AIzaSyYOUR...KEY
 ```
 
 ## 🔍 Testing Recommendations
@@ -182,9 +182,9 @@ Use the frontend application to generate a meal plan and check:
 
 Before deploying to production:
 
-- [ ] Set `GEMINI_API_KEY` in Netlify to the new Vertex AI key
-- [ ] Set `GEMINI_API_ENDPOINT=vertex` in Netlify
-- [ ] Set `GEMINI_MODEL=gemini-2.5-flash-lite` in Netlify
+- [ ] Set `GEMINI_API_KEY` in Netlify to your new API key
+- [ ] Set `GEMINI_API_ENDPOINT=vertex` in Netlify (or `generativelanguage` for Google AI Studio)
+- [ ] Set `GEMINI_MODEL=gemini-2.5-flash-lite` in Netlify (or your preferred model)
 - [ ] Set `ALLOWED_ORIGIN` to your GitHub Pages URL (or specific domains)
 - [ ] Deploy the changes to Netlify
 - [ ] Test health-check endpoint
@@ -192,6 +192,8 @@ Before deploying to production:
 - [ ] Test generating a meal plan
 - [ ] Verify logs show correct endpoint and model
 - [ ] Verify API key is masked in logs
+
+**Security Note**: The API key shown in the problem statement should be kept confidential and only set in the Netlify environment variables dashboard, never committed to code.
 
 ## 📝 Files Changed
 
