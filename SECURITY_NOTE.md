@@ -33,7 +33,7 @@ The Perfect-Plate application implements several security measures:
    - All API calls go through serverless functions
 
 2. **Automatic key masking**
-   - Function logs show: `AQ.Ab8RN6I...COg` (example)
+   - Function logs show: `AQ.YOUR_VER...HERE` (example format)
    - Full key is never logged
 
 3. **Environment variable isolation**

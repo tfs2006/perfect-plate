@@ -74,7 +74,7 @@ Visit: `https://your-site.netlify.app/.netlify/functions/health-check`
   "status": "ok",
   "timestamp": "2025-10-28T01:00:00.000Z",
   "configuration": {
-    "apiKey": "AQ.Ab8RN6I...COg",
+    "apiKey": "AQ.YOUR_VERT...HERE",
     "endpointType": "vertex",
     "baseUrl": "https://aiplatform.googleapis.com/v1/publishers/google/models/",
     "model": "gemini-2.5-flash-lite"
@@ -108,7 +108,7 @@ Visit: `https://your-site.netlify.app/.netlify/functions/list-models`
 ```
 [Gemini Proxy] Using vertex endpoint: https://aiplatform.googleapis.com/v1/publishers/google/models/
 [Gemini Proxy] Model endpoint: gemini-2.5-flash-lite:generateContent
-[Gemini Proxy] API Key: AQ.Ab8RN6I...COg
+[Gemini Proxy] API Key: AQ.YOUR_VER...HERE
 [Gemini Proxy] ✅ Model 'models/gemini-2.5-flash-lite' check passed
 ```
 
