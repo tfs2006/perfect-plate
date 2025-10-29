@@ -374,10 +374,16 @@ ${dayName}: ${userInputs.age}yr ${userInputs.gender}, ${userInputs.fitnessGoal}$
                 
                 const text = getFirstPartText(response);
                 if (text) {
+                    console.log(`[${dayName}] Response text length:`, text.length);
                     const dayData = extractFirstJSON(text);
                     if (dayData && dayData.days && dayData.days[0]) {
+                        console.log(`[${dayName}] Successfully parsed day data`);
                         planDays.push(dayData.days[0]);
+                    } else {
+                        console.warn(`[${dayName}] Failed to extract day data from JSON`, { dayData });
                     }
+                } else {
+                    console.warn(`[${dayName}] No text returned from API`);
                 }
             } catch (err) {
                 console.error(`[Day Generation] Failed to generate ${dayName}:`, err);
