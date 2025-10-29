@@ -351,14 +351,14 @@ ${userInputs.age}yr ${userInputs.gender} ${userInputs.fitnessGoal} 7days.`;
             const dayName = days[i];
             if (loaderText) loaderText.textContent = `Creating ${dayName}... (${i+1}/${days.length})`;
             
-            const prompt = `{"days":[{"day":"${dayName}","meals":[{"name":"Breakfast","items":[{"title":"Eggs","calories":350}]},{"name":"Lunch","items":[{"title":"Chicken","calories":450}]},{"name":"Dinner","items":[{"title":"Salmon","calories":550}]}]}]}
+            const prompt = `{"days":[{"day":"${dayName}","meals":[{"name":"Breakfast","items":[{"title":"Eggs","calories":350}]},{"name":"Lunch","items":[{"title":"Chicken","calories":450}]},{"name":"Dinner","items":[{"title":"Fish","calories":500}]}]}]}
 
 ${userInputs.age}yr ${userInputs.gender} ${userInputs.fitnessGoal} ${dayName}.`;
             
             const body = {
                 contents: [{ parts: [{ text: prompt }] }],
                 generationConfig: {
-                    maxOutputTokens: 300, // Very conservative for single day
+                    maxOutputTokens: 250, // Extremely conservative for single day
                     temperature: 0.7,
                     topP: 0.95,
                     topK: 40
