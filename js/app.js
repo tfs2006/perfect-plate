@@ -358,7 +358,7 @@ ${userInputs.age}yr ${userInputs.gender} ${userInputs.fitnessGoal} ${dayName}.`;
             const body = {
                 contents: [{ parts: [{ text: prompt }] }],
                 generationConfig: {
-                    maxOutputTokens: 2000, // gemini-2.5-flash can handle much more
+                    maxOutputTokens: 4000, // gemini-2.5-flash can handle up to 8192
                     temperature: 0.7,
                     topP: 0.95,
                     topK: 40
