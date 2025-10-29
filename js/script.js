@@ -337,9 +337,9 @@ ${daysList}: ${i.age}yr ${i.gender}, ${i.fitnessGoal}${i.dietaryPrefs?.length ? 
 
     // ---------- Single 7-Day Prompt (most efficient) ----------
     function buildComplete7DayPrompt(userInputs) {
-      return `{"days":[{"day":"Mon","totals":{"calories":1800,"protein":120,"carbs":180,"fat":60},"meals":[{"name":"Breakfast","items":[{"title":"Eggs","calories":350,"protein":20,"carbs":30,"fat":15,"ingredients":[{"item":"Eggs","qty":2,"unit":"ea"}],"steps":["Cook"]}]},{"name":"Lunch","items":[{"title":"Chicken","calories":450,"protein":35,"carbs":25,"fat":22,"ingredients":[{"item":"Chicken","qty":4,"unit":"oz"}],"steps":["Grill"]}]},{"name":"Dinner","items":[{"title":"Salmon","calories":550,"protein":40,"carbs":45,"fat":20,"ingredients":[{"item":"Salmon","qty":5,"unit":"oz"}],"steps":["Bake"]}]}]},{"day":"Tue",...},{"day":"Wed",...},{"day":"Thu",...},{"day":"Fri",...},{"day":"Sat",...},{"day":"Sun",...}]}
+      return `{"days":[{"day":"Mon","meals":[{"name":"Breakfast","items":[{"title":"Eggs","calories":350,"protein":20,"carbs":30,"fat":15}]},{"name":"Lunch","items":[{"title":"Chicken","calories":450,"protein":35,"carbs":25,"fat":22}]},{"name":"Dinner","items":[{"title":"Salmon","calories":550,"protein":40,"carbs":45,"fat":20}]}]},{"day":"Tue",...},{"day":"Wed",...},{"day":"Thu",...},{"day":"Fri",...},{"day":"Sat",...},{"day":"Sun",...}]}
 
-7-day ${userInputs.age}yr ${userInputs.gender} ${userInputs.fitnessGoal}${userInputs.dietaryPrefs?.length ? ' '+userInputs.dietaryPrefs[0] : ''}${userInputs.exclusions ? ' no-'+userInputs.exclusions.slice(0,20) : ''}. Daily: 3 meals, 1 item each, vary proteins.`;
+7d ${userInputs.age}yr ${userInputs.gender} ${userInputs.fitnessGoal}${userInputs.dietaryPrefs?.length ? ' '+userInputs.dietaryPrefs[0] : ''}. 3meals/day, vary proteins.`;
     }
 
     // ---------- Generate Complete 7-Day Plan ----------
@@ -351,7 +351,7 @@ ${daysList}: ${i.age}yr ${i.gender}, ${i.fitnessGoal}${i.dietaryPrefs?.length ? 
             const body = {
                 contents: [{ parts: [{ text: prompt }] }],
                 generationConfig: {
-                    maxOutputTokens: 800, // Reduced from 1500 to avoid MAX_TOKENS
+                    maxOutputTokens: 600, // Reduced from 800 to avoid MAX_TOKENS
                     temperature: 0.7,
                     topP: 0.95,
                     topK: 40
@@ -423,16 +423,16 @@ ${daysList}: ${i.age}yr ${i.gender}, ${i.fitnessGoal}${i.dietaryPrefs?.length ? 
     // ---------- Fallback 3-Day Generation ----------
     async function generateFallback3DayPlan() {
         try {
-            const prompt = `{"days":[{"day":"Mon","totals":{"calories":1800,"protein":120,"carbs":180,"fat":60},"meals":[{"name":"Breakfast","items":[{"title":"Eggs","calories":350,"protein":20,"carbs":30,"fat":15,"ingredients":[{"item":"Eggs","qty":2,"unit":"ea"}],"steps":["Cook"]}]},{"name":"Lunch","items":[{"title":"Chicken","calories":450,"protein":35,"carbs":25,"fat":22,"ingredients":[{"item":"Chicken","qty":4,"unit":"oz"}],"steps":["Grill"]}]},{"name":"Dinner","items":[{"title":"Salmon","calories":550,"protein":40,"carbs":45,"fat":20,"ingredients":[{"item":"Salmon","qty":5,"unit":"oz"}],"steps":["Bake"]}]}]},{"day":"Tue",...},{"day":"Wed",...}]}
+            const prompt = `{"days":[{"day":"Mon","meals":[{"name":"Breakfast","items":[{"title":"Eggs","calories":350,"protein":20,"carbs":30,"fat":15}]},{"name":"Lunch","items":[{"title":"Chicken","calories":450,"protein":35,"carbs":25,"fat":22}]},{"name":"Dinner","items":[{"title":"Salmon","calories":550,"protein":40,"carbs":45,"fat":20}]}]},{"day":"Tue",...},{"day":"Wed",...}]}
 
-3-day ${userInputs.age}yr ${userInputs.gender} ${userInputs.fitnessGoal}${userInputs.dietaryPrefs?.length ? ' '+userInputs.dietaryPrefs[0] : ''}${userInputs.exclusions ? ' no-'+userInputs.exclusions.slice(0,20) : ''}. Daily: 3 meals, 1 item each.`;
+3d ${userInputs.age}yr ${userInputs.gender} ${userInputs.fitnessGoal}${userInputs.dietaryPrefs?.length ? ' '+userInputs.dietaryPrefs[0] : ''}. 3meals/day.`;
             
             console.log("3-Day fallback prompt:", prompt);
             
             const body = {
                 contents: [{ parts: [{ text: prompt }] }],
                 generationConfig: {
-                    maxOutputTokens: 400, // Much smaller for 3 days
+                    maxOutputTokens: 250, // Much smaller for 3 days
                     temperature: 0.7,
                     topP: 0.95,
                     topK: 40
