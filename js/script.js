@@ -1185,28 +1185,30 @@ Use different proteins/methods than existing recipes.`;
             }
           }
 
-          // Try with progressively lower token budgets to stay within limits
-          // Most Gemini models have ~8K token context (prompt + output combined)
-          let planPart = await tryOnce(1200, 0.7, 1);  // Reduced from 2200
-          if (!planPart) planPart = await tryOnce(700, 0.3, 2);  // Reduced attempts and tokens
+          // Single attempt only - no retries to minimize API calls
+          // Use conservative token budget to maximize success rate
+          let planPart = await tryOnce(600, 0.5, 1);  // Single attempt with conservative settings
           return planPart;
         }
 
-        // ===== SINGLE-DAY STRATEGY =====
-        // Generate days one at a time for better efficiency and rate limit management.
-        // Single days are more reliable and use fewer tokens than batches.
+        // ===== RATE-LIMIT FRIENDLY STRATEGY =====
+        // Generate only 3 days maximum per click to stay under free tier limit of 10 requests/hour
+        // This prevents rate limiting and allows multiple generations per hour
         const daysOut = [];
         const dayErrors = []; // Track errors for better diagnostics
         
+        const MAX_DAYS_PER_CLICK = 3; // Stay well under 10 request limit
+        const daysToProcess = DAYS.slice(0, MAX_DAYS_PER_CLICK);
+        
         let i = 0;
-        while (i < DAYS.length) {
+        while (i < daysToProcess.length) {
           // Always generate single days for maximum efficiency
-          const daysToGenerate = [DAYS[i]];
+          const daysToGenerate = [daysToProcess[i]];
           
           const daysList = daysToGenerate.join(" & ");
-          if (loaderText) loaderText.textContent = `Creating your plan… ${i+1}-${i+daysToGenerate.length}/7 (${daysList})`;
+          if (loaderText) loaderText.textContent = `Creating your plan… ${i+1}/${daysToProcess.length} (${daysList})`;
           
-          console.log(`[Generation] Processing batch: ${daysList} (${daysToGenerate.length} day${daysToGenerate.length > 1 ? 's' : ''})`);
+          console.log(`[Generation] Processing day: ${daysList} (${i+1}/${daysToProcess.length})`);
           
           let batchSuccess = false;
           
@@ -1496,7 +1498,14 @@ Use different proteins/methods than existing recipes.`;
         content?.appendChild(panel);
       });
 
-      if (plan.days.length) activateTab("tab-0");
+      if (plan.days.length) {
+        activateTab("tab-0");
+        
+        // Show success message with info about partial generation
+        if (plan.days.length < 7) {
+          showMessage(`✓ Generated ${plan.days.length} days successfully! Due to free tier limits (10 requests/hour), we generate 3 days at a time. Click "Create My Plan" again to generate more days.`, "success");
+        }
+      }
 
       $("grocery-list-button")?.addEventListener("click", () => renderGroceryList(buildGroceryGroups(plan)));
 
