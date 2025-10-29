@@ -337,11 +337,9 @@ ${daysList}: ${i.age}yr ${i.gender}, ${i.fitnessGoal}${i.dietaryPrefs?.length ? 
 
     // ---------- Single 7-Day Prompt (most efficient) ----------
     function buildComplete7DayPrompt(userInputs) {
-      const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-      
-      return `{"days":[{"day":"Monday","totals":{"calories":1800,"protein":120,"carbs":180,"fat":60},"meals":[{"name":"Breakfast","items":[{"title":"Eggs Toast","calories":350,"protein":20,"carbs":30,"fat":15,"ingredients":[{"item":"Eggs","qty":2,"unit":"large"}],"steps":["Cook","Serve"]}]},{"name":"Lunch","items":[{"title":"Chicken Salad","calories":450,"protein":35,"carbs":25,"fat":22,"ingredients":[{"item":"Chicken","qty":4,"unit":"oz"}],"steps":["Grill","Mix"]}]},{"name":"Dinner","items":[{"title":"Salmon Rice","calories":550,"protein":40,"carbs":45,"fat":20,"ingredients":[{"item":"Salmon","qty":5,"unit":"oz"}],"steps":["Bake","Serve"]}]}]},...6 more days]
+      return `{"days":[{"day":"Mon","totals":{"calories":1800,"protein":120,"carbs":180,"fat":60},"meals":[{"name":"Breakfast","items":[{"title":"Eggs","calories":350,"protein":20,"carbs":30,"fat":15,"ingredients":[{"item":"Eggs","qty":2,"unit":"ea"}],"steps":["Cook"]}]},{"name":"Lunch","items":[{"title":"Chicken","calories":450,"protein":35,"carbs":25,"fat":22,"ingredients":[{"item":"Chicken","qty":4,"unit":"oz"}],"steps":["Grill"]}]},{"name":"Dinner","items":[{"title":"Salmon","calories":550,"protein":40,"carbs":45,"fat":20,"ingredients":[{"item":"Salmon","qty":5,"unit":"oz"}],"steps":["Bake"]}]}]},{"day":"Tue",...},{"day":"Wed",...},{"day":"Thu",...},{"day":"Fri",...},{"day":"Sat",...},{"day":"Sun",...}]}
 
-Complete 7-day meal plan for ${userInputs.age}yr ${userInputs.gender}, ${userInputs.fitnessGoal}${userInputs.dietaryPrefs?.length ? ', '+userInputs.dietaryPrefs.slice(0,2).join('/') : ''}${userInputs.exclusions ? ', avoid '+userInputs.exclusions.slice(0,50) : ''}. Each day: 3 meals (Breakfast/Lunch/Dinner), 1 item per meal. Vary proteins daily. Total ~1800 cal/day.`;
+7-day ${userInputs.age}yr ${userInputs.gender} ${userInputs.fitnessGoal}${userInputs.dietaryPrefs?.length ? ' '+userInputs.dietaryPrefs[0] : ''}${userInputs.exclusions ? ' no-'+userInputs.exclusions.slice(0,20) : ''}. Daily: 3 meals, 1 item each, vary proteins.`;
     }
 
     // ---------- Generate Complete 7-Day Plan ----------
@@ -353,7 +351,7 @@ Complete 7-day meal plan for ${userInputs.age}yr ${userInputs.gender}, ${userInp
             const body = {
                 contents: [{ parts: [{ text: prompt }] }],
                 generationConfig: {
-                    maxOutputTokens: 1500, // Larger limit for 7-day response
+                    maxOutputTokens: 800, // Reduced from 1500 to avoid MAX_TOKENS
                     temperature: 0.7,
                     topP: 0.95,
                     topK: 40
@@ -419,6 +417,61 @@ Complete 7-day meal plan for ${userInputs.age}yr ${userInputs.gender}, ${userInp
         } catch (error) {
             console.error("Processing error:", error);
             throw new Error("Error processing meal plan: " + error.message);
+        }
+    }
+
+    // ---------- Fallback 3-Day Generation ----------
+    async function generateFallback3DayPlan() {
+        try {
+            const prompt = `{"days":[{"day":"Mon","totals":{"calories":1800,"protein":120,"carbs":180,"fat":60},"meals":[{"name":"Breakfast","items":[{"title":"Eggs","calories":350,"protein":20,"carbs":30,"fat":15,"ingredients":[{"item":"Eggs","qty":2,"unit":"ea"}],"steps":["Cook"]}]},{"name":"Lunch","items":[{"title":"Chicken","calories":450,"protein":35,"carbs":25,"fat":22,"ingredients":[{"item":"Chicken","qty":4,"unit":"oz"}],"steps":["Grill"]}]},{"name":"Dinner","items":[{"title":"Salmon","calories":550,"protein":40,"carbs":45,"fat":20,"ingredients":[{"item":"Salmon","qty":5,"unit":"oz"}],"steps":["Bake"]}]}]},{"day":"Tue",...},{"day":"Wed",...}]}
+
+3-day ${userInputs.age}yr ${userInputs.gender} ${userInputs.fitnessGoal}${userInputs.dietaryPrefs?.length ? ' '+userInputs.dietaryPrefs[0] : ''}${userInputs.exclusions ? ' no-'+userInputs.exclusions.slice(0,20) : ''}. Daily: 3 meals, 1 item each.`;
+            
+            console.log("3-Day fallback prompt:", prompt);
+            
+            const body = {
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: {
+                    maxOutputTokens: 400, // Much smaller for 3 days
+                    temperature: 0.7,
+                    topP: 0.95,
+                    topK: 40
+                }
+            };
+            
+            const response = await secureApiCall("generate-plan", {
+                endpoint: "gemini-2.0-flash-lite:generateContent",
+                body: body
+            });
+            
+            const text = getFirstPartText(response);
+            if (!text) {
+                throw new Error("No response text from API");
+            }
+            
+            // Process as a partial week
+            const weekData = extractFirstJSON(text);
+            if (!weekData || !weekData.days || !Array.isArray(weekData.days)) {
+                throw new Error("Invalid 3-day structure");
+            }
+            
+            const plan = coercePlan(weekData);
+            const finalPlan = {
+                planTitle: "Your 3-Day Meal Plan (Preview)",
+                notes: "This is a 3-day preview. Click 'Regenerate' to try for more days.",
+                days: plan.days
+            };
+            
+            finalPlan.days.forEach(normalizeDayMeals);
+            ensureDayTotals(finalPlan);
+            currentPlan = finalPlan;
+            renderResults(finalPlan, userInputs);
+            
+            console.log("✅ 3-day fallback plan generated successfully");
+            
+        } catch (error) {
+            console.error("3-Day fallback error:", error);
+            throw error;
         }
     }
 
@@ -1063,8 +1116,16 @@ Use different proteins/methods than existing recipes.`;
         // Update loader text
         if (loaderText) loaderText.textContent = `Creating your complete 7-day plan...`;
         
-        // Generate complete 7-day plan in one API call
-        await generateComplete7DayPlan();
+        // Try single 7-day generation first, fallback to 3-day if it fails
+        try {
+          await generateComplete7DayPlan();
+        } catch (error) {
+          console.warn("7-day generation failed, falling back to 3-day generation:", error);
+          if (loaderText) loaderText.textContent = `Creating your 3-day plan...`;
+          
+          // Fallback to generating just 3 days to stay within token limits
+          await generateFallback3DayPlan();
+        }
 
         // Plan image: generate via Gemini Images endpoint
         try {
