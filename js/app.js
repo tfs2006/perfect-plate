@@ -344,21 +344,22 @@ ${userInputs.age}yr ${userInputs.gender} ${userInputs.fitnessGoal} 7days.`;
 
     // ---------- Generate Day-By-Day Plan (Most Reliable) ----------
     async function generateDayByDayPlan() {
-        const days = ["Monday", "Tuesday", "Wednesday"];
+        const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
         const planDays = [];
         
         for (let i = 0; i < days.length; i++) {
             const dayName = days[i];
             if (loaderText) loaderText.textContent = `Creating ${dayName}... (${i+1}/${days.length})`;
             
-            const prompt = `{"days":[{"day":"${dayName}","meals":[{"name":"Breakfast","items":[{"title":"Eggs","calories":350}]},{"name":"Lunch","items":[{"title":"Chicken","calories":450}]},{"name":"Dinner","items":[{"title":"Fish","calories":500}]}]}]}
+            // More complete prompt with ingredients and steps structure
+            const prompt = `{"days":[{"day":"${dayName}","totals":{"calories":1800,"protein":120,"carbs":180,"fat":60},"meals":[{"name":"Breakfast","items":[{"title":"Scrambled Eggs with Toast","calories":350,"protein":20,"carbs":30,"fat":15,"ingredients":[{"item":"Eggs","qty":"2","unit":"large"},{"item":"Whole wheat bread","qty":"1","unit":"slice"}],"steps":["Beat eggs in bowl","Cook in pan","Toast bread","Serve"]}]},{"name":"Lunch","items":[{"title":"Grilled Chicken Salad","calories":450,"protein":35,"carbs":25,"fat":20,"ingredients":[{"item":"Chicken breast","qty":"4","unit":"oz"},{"item":"Mixed greens","qty":"2","unit":"cups"}],"steps":["Grill chicken","Chop vegetables","Toss salad","Add dressing"]}]},{"name":"Dinner","items":[{"title":"Baked Salmon","calories":500,"protein":40,"carbs":30,"fat":25,"ingredients":[{"item":"Salmon fillet","qty":"5","unit":"oz"},{"item":"Broccoli","qty":"1","unit":"cup"}],"steps":["Preheat oven","Season salmon","Bake 20 min","Steam broccoli"]}]}]}]}
 
-${userInputs.age}yr ${userInputs.gender} ${userInputs.fitnessGoal} ${dayName}.`;
+${dayName}: ${userInputs.age}yr ${userInputs.gender}, ${userInputs.fitnessGoal}${userInputs.dietaryPrefs?.length ? ', '+userInputs.dietaryPrefs.join('/') : ''}${userInputs.exclusions ? ', avoid '+userInputs.exclusions : ''}${userInputs.ethnicity ? ', '+userInputs.ethnicity+' cuisine' : ''}. 3 meals with full ingredients, steps, macros.`;
             
             const body = {
                 contents: [{ parts: [{ text: prompt }] }],
                 generationConfig: {
-                    maxOutputTokens: 4000, // gemini-2.5-flash can handle up to 8192
+                    maxOutputTokens: 6000, // Increased for complete meal details
                     temperature: 0.7,
                     topP: 0.95,
                     topK: 40
