@@ -1,0 +1,31 @@
+{
+  "name": "perfect-plate",
+  "version": "1.0.0",
+  "description": "AI-powered meal planning app with Google Gemini integration",
+  "type": "module",
+  "main": "index.html",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "echo 'Static site - no build needed'",
+    "start": "echo 'Static site - serve index.html'"
+  },
+  "dependencies": {
+    "google-auth-library": "^9.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "meal-planning",
+    "ai",
+    "google-gemini",
+    "nutrition",
+    "vercel"
+  ],
+  "author": "Perfect Plate",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tfs2006/perfect-plate.git"
+  }
+}
