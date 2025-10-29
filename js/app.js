@@ -351,10 +351,13 @@ ${userInputs.age}yr ${userInputs.gender} ${userInputs.fitnessGoal} 7days.`;
             const dayName = days[i];
             if (loaderText) loaderText.textContent = `Creating ${dayName}... (${i+1}/${days.length})`;
             
-            // More complete prompt with ingredients and steps structure
-            const prompt = `{"days":[{"day":"${dayName}","totals":{"calories":1800,"protein":120,"carbs":180,"fat":60},"meals":[{"name":"Breakfast","items":[{"title":"Scrambled Eggs with Toast","calories":350,"protein":20,"carbs":30,"fat":15,"ingredients":[{"item":"Eggs","qty":"2","unit":"large"},{"item":"Whole wheat bread","qty":"1","unit":"slice"}],"steps":["Beat eggs in bowl","Cook in pan","Toast bread","Serve"]}]},{"name":"Lunch","items":[{"title":"Grilled Chicken Salad","calories":450,"protein":35,"carbs":25,"fat":20,"ingredients":[{"item":"Chicken breast","qty":"4","unit":"oz"},{"item":"Mixed greens","qty":"2","unit":"cups"}],"steps":["Grill chicken","Chop vegetables","Toss salad","Add dressing"]}]},{"name":"Dinner","items":[{"title":"Baked Salmon","calories":500,"protein":40,"carbs":30,"fat":25,"ingredients":[{"item":"Salmon fillet","qty":"5","unit":"oz"},{"item":"Broccoli","qty":"1","unit":"cup"}],"steps":["Preheat oven","Season salmon","Bake 20 min","Steam broccoli"]}]}]}]}
+            // Strict JSON-only prompt
+            const prompt = `Return ONLY valid JSON, no explanatory text. Create a meal plan for ${dayName}.
 
-${dayName}: ${userInputs.age}yr ${userInputs.gender}, ${userInputs.fitnessGoal}${userInputs.dietaryPrefs?.length ? ', '+userInputs.dietaryPrefs.join('/') : ''}${userInputs.exclusions ? ', avoid '+userInputs.exclusions : ''}${userInputs.ethnicity ? ', '+userInputs.ethnicity+' cuisine' : ''}. 3 meals with full ingredients, steps, macros.`;
+Requirements: ${userInputs.age}yr ${userInputs.gender}, ${userInputs.fitnessGoal}${userInputs.dietaryPrefs?.length ? ', '+userInputs.dietaryPrefs.join('/') : ''}${userInputs.exclusions ? ', avoid '+userInputs.exclusions : ''}${userInputs.ethnicity ? ', '+userInputs.ethnicity+' cuisine' : ''}
+
+JSON format (respond with ONLY this structure, no other text):
+{"days":[{"day":"${dayName}","totals":{"calories":1800,"protein":120,"carbs":180,"fat":60},"meals":[{"name":"Breakfast","items":[{"title":"Scrambled Eggs","calories":350,"protein":20,"carbs":30,"fat":15,"ingredients":[{"item":"Eggs","qty":"2","unit":"large"}],"steps":["Beat eggs","Cook in pan","Serve"]}]},{"name":"Lunch","items":[{"title":"Grilled Chicken","calories":450,"protein":35,"carbs":25,"fat":20,"ingredients":[{"item":"Chicken breast","qty":"4","unit":"oz"}],"steps":["Grill chicken","Serve"]}]},{"name":"Dinner","items":[{"title":"Baked Salmon","calories":500,"protein":40,"carbs":30,"fat":25,"ingredients":[{"item":"Salmon","qty":"5","unit":"oz"}],"steps":["Bake salmon","Serve"]}]}]}]}`;
             
             const body = {
                 contents: [{ parts: [{ text: prompt }] }],
