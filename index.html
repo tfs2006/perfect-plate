@@ -173,13 +173,32 @@
                 <label for="exclusions" class="font-medium text-gray-700">Foods to Exclude</label>
                 <textarea id="exclusions" rows="3" class="mt-2 w-full px-4 py-3 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 shadow-sm" placeholder="e.g., Cilantro, Mushrooms, Shellfish. If none, leave blank."></textarea>
               </div>
+              
+              <div>
+                <label class="font-medium text-gray-700">Which meals would you like?</label>
+                <p class="text-xs text-gray-400 mt-1">Select the meals you want to generate</p>
+                <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <label class="checkbox-card block border-2 border-gray-200 rounded-lg p-4 text-center cursor-pointer font-semibold hover:border-emerald-400">
+                    <input type="checkbox" name="meals" value="All" id="meal-all" class="hidden"><span>All Meals</span>
+                  </label>
+                  <label class="checkbox-card block border-2 border-gray-200 rounded-lg p-4 text-center cursor-pointer font-semibold hover:border-emerald-400">
+                    <input type="checkbox" name="meals" value="Breakfast" class="hidden meal-checkbox"><span>Breakfast</span>
+                  </label>
+                  <label class="checkbox-card block border-2 border-gray-200 rounded-lg p-4 text-center cursor-pointer font-semibold hover:border-emerald-400">
+                    <input type="checkbox" name="meals" value="Lunch" class="hidden meal-checkbox"><span>Lunch</span>
+                  </label>
+                  <label class="checkbox-card block border-2 border-gray-200 rounded-lg p-4 text-center cursor-pointer font-semibold hover:border-emerald-400">
+                    <input type="checkbox" name="meals" value="Dinner" class="hidden meal-checkbox"><span>Dinner</span>
+                  </label>
+                </div>
+              </div>
             </div>
 
             <div class="mt-10 flex justify-between">
               <button id="back-3" type="button" class="bg-gray-200 text-gray-800 font-semibold py-3 px-8 rounded-lg hover:bg-gray-300 transition duration-300">Back</button>
-              <button type="submit" class="btn-primary text-white font-bold py-3 px-8 rounded-lg hover:opacity-90 transition duration-300 shadow-lg flex items-center gap-2">
+              <button type="submit" id="generate-button" class="btn-primary text-white font-bold py-3 px-8 rounded-lg hover:opacity-90 transition duration-300 shadow-lg flex items-center gap-2">
                 <i data-lucide="sparkles" class="w-5 h-5"></i>
-                Create My Plan
+                Generate My Meal
               </button>
             </div>
           </div>
@@ -241,7 +260,7 @@
   </div>
 
   <!-- Config FIRST, then app script -->
-  <script src="js/settings.js?v=jsononly"></script>
-  <script src="js/app.js?v=jsononly"></script>
+  <script src="js/settings.js?v=mealselect"></script>
+  <script src="js/app.js?v=mealselect"></script>
 </body>
 </html>

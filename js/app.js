@@ -229,6 +229,44 @@
     $("back-3")?.addEventListener("click", () => goToStep(2));
     goToStep(1);
 
+    // ---------- Meal Selection Logic ----------
+    const mealAllCheckbox = document.getElementById('meal-all');
+    const individualMealCheckboxes = document.querySelectorAll('.meal-checkbox');
+    
+    // When "All Meals" is checked, check all individual meals
+    mealAllCheckbox?.addEventListener('change', () => {
+      individualMealCheckboxes.forEach(cb => {
+        cb.checked = mealAllCheckbox.checked;
+        cb.dispatchEvent(new Event('change'));
+      });
+    });
+    
+    // When any individual meal is unchecked, uncheck "All Meals"
+    individualMealCheckboxes.forEach(cb => {
+      cb.addEventListener('change', () => {
+        if (!cb.checked && mealAllCheckbox) {
+          mealAllCheckbox.checked = false;
+          const allLabel = mealAllCheckbox.closest('.checkbox-card');
+          if (allLabel) {
+            allLabel.style.borderColor = '';
+            allLabel.style.backgroundColor = '';
+            allLabel.style.color = '';
+          }
+        }
+        // If all individual meals are checked, check "All Meals"
+        const allChecked = Array.from(individualMealCheckboxes).every(checkbox => checkbox.checked);
+        if (allChecked && mealAllCheckbox) {
+          mealAllCheckbox.checked = true;
+          const allLabel = mealAllCheckbox.closest('.checkbox-card');
+          if (allLabel) {
+            allLabel.style.borderColor = '#059669';
+            allLabel.style.backgroundColor = '#ecfdf5';
+            allLabel.style.color = '#047857';
+          }
+        }
+      });
+    });
+    
     // ---------- Checkbox Cards ----------
     // Add visual feedback for checkbox cards (for browsers without :has() support)
     document.querySelectorAll('.checkbox-card input[type="checkbox"]').forEach(checkbox => {
@@ -413,6 +451,86 @@ JSON format (respond with ONLY this structure, no other text):
             renderResults(finalPlan, userInputs);
         } else {
             throw new Error("Failed to generate any days");
+        }
+    }
+
+    // ---------- Generate Selected Meals for Today ----------
+    async function generateSelectedMeals(selectedMeals) {
+        const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+        
+        // Build meal examples based on what user selected
+        const mealExamples = [];
+        if (selectedMeals.includes('Breakfast')) {
+            mealExamples.push('{"name":"Breakfast","items":[{"title":"Scrambled Eggs","calories":350,"protein":20,"carbs":30,"fat":15,"ingredients":[{"item":"Eggs","qty":"2","unit":"large"}],"steps":["Beat eggs","Cook","Serve"]}]}');
+        }
+        if (selectedMeals.includes('Lunch')) {
+            mealExamples.push('{"name":"Lunch","items":[{"title":"Grilled Chicken","calories":450,"protein":35,"carbs":25,"fat":20,"ingredients":[{"item":"Chicken breast","qty":"4","unit":"oz"}],"steps":["Grill chicken","Serve"]}]}');
+        }
+        if (selectedMeals.includes('Dinner')) {
+            mealExamples.push('{"name":"Dinner","items":[{"title":"Baked Salmon","calories":500,"protein":40,"carbs":30,"fat":25,"ingredients":[{"item":"Salmon","qty":"5","unit":"oz"}],"steps":["Bake salmon","Serve"]}]}');
+        }
+        
+        const prompt = `Return ONLY valid JSON, no explanatory text. Create ${selectedMeals.join(', ')} for ${today}.
+
+Requirements: ${userInputs.age}yr ${userInputs.gender}, ${userInputs.fitnessGoal}${userInputs.dietaryPrefs?.length ? ', '+userInputs.dietaryPrefs.join('/') : ''}${userInputs.exclusions ? ', avoid '+userInputs.exclusions : ''}${userInputs.ethnicity ? ', '+userInputs.ethnicity+' cuisine' : ''}
+
+JSON format (respond with ONLY this structure, no other text):
+{"days":[{"day":"${today}","totals":{"calories":1800,"protein":120,"carbs":180,"fat":60},"meals":[${mealExamples.join(',')}]}]}`;
+        
+        const body = {
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+                maxOutputTokens: 8000,
+                temperature: 0.7,
+                topP: 0.95,
+                topK: 40
+            }
+        };
+        
+        try {
+            const response = await secureApiCall("generate-plan", {
+                endpoint: "gemini-2.0-flash:generateContent",
+                body: body
+            });
+            
+            const text = getFirstPartText(response);
+            if (text) {
+                console.log(`[${today}] Response text length:`, text.length);
+                console.log(`[${today}] First 500 chars:`, text.substring(0, 500));
+                const dayData = extractFirstJSON(text);
+                console.log(`[${today}] Extracted JSON:`, dayData);
+                
+                if (dayData && dayData.days && dayData.days[0]) {
+                    const finalPlan = {
+                        planTitle: `Your ${selectedMeals.join(', ')} for ${today}`,
+                        notes: "",
+                        days: [dayData.days[0]]
+                    };
+                    
+                    finalPlan.days.forEach(normalizeDayMeals);
+                    ensureDayTotals(finalPlan);
+                    currentPlan = finalPlan;
+                    renderResults(finalPlan, userInputs);
+                } else if (dayData && dayData.day) {
+                    const finalPlan = {
+                        planTitle: `Your ${selectedMeals.join(', ')} for ${today}`,
+                        notes: "",
+                        days: [dayData]
+                    };
+                    
+                    finalPlan.days.forEach(normalizeDayMeals);
+                    ensureDayTotals(finalPlan);
+                    currentPlan = finalPlan;
+                    renderResults(finalPlan, userInputs);
+                } else {
+                    throw new Error("Failed to extract meal data from response");
+                }
+            } else {
+                throw new Error("No response text from API");
+            }
+        } catch (err) {
+            console.error(`[Meal Generation] Failed:`, err);
+            throw err;
         }
     }
 
@@ -1180,8 +1298,16 @@ Use different proteins/methods than existing recipes.`;
       const exclusions = $("exclusions").value.trim();
       const dietaryPrefs = Array.from(document.querySelectorAll('input[name="diet"]:checked')).map(el => el.value);
       
-      // Store user inputs for 7-day generation
-      userInputs = { age, gender, ethnicity, medicalConditions, fitnessGoal, exclusions, dietaryPrefs, goal: fitnessGoal };
+      // Get selected meals
+      const selectedMeals = Array.from(document.querySelectorAll('.meal-checkbox:checked')).map(el => el.value);
+      
+      if (selectedMeals.length === 0) {
+        showMessage("Please select at least one meal type (Breakfast, Lunch, or Dinner).");
+        return;
+      }
+      
+      // Store user inputs
+      userInputs = { age, gender, ethnicity, medicalConditions, fitnessGoal, exclusions, dietaryPrefs, goal: fitnessGoal, selectedMeals };
 
       formContainer.style.display = "none";
       showLoader();
@@ -1191,10 +1317,10 @@ Use different proteins/methods than existing recipes.`;
       if (imgWrap) imgWrap.style.display = 'none';
 
       try {
-        // Generate 1 day at a time - most reliable for detailed recipes
-        if (loaderText) loaderText.textContent = `Creating your meal plan...`;
+        // Generate only selected meals for today
+        if (loaderText) loaderText.textContent = `Creating your ${selectedMeals.join(', ')}...`;
         
-        await generateDayByDayPlan();
+        await generateSelectedMeals(selectedMeals);
 
         // Plan image: generate via Gemini Images endpoint
         try {
