@@ -342,6 +342,59 @@ ${daysList}: ${i.age}yr ${i.gender}, ${i.fitnessGoal}${i.dietaryPrefs?.length ? 
 ${userInputs.age}yr ${userInputs.gender} ${userInputs.fitnessGoal} 7days.`;
     }
 
+    // ---------- Generate Day-By-Day Plan (Most Reliable) ----------
+    async function generateDayByDayPlan() {
+        const days = ["Monday", "Tuesday", "Wednesday"];
+        const planDays = [];
+        
+        for (let i = 0; i < days.length; i++) {
+            const dayName = days[i];
+            if (loaderText) loaderText.textContent = `Creating ${dayName}... (${i+1}/${days.length})`;
+            
+            const prompt = `{"days":[{"day":"${dayName}","meals":[{"name":"Breakfast","items":[{"title":"Eggs","calories":350}]},{"name":"Lunch","items":[{"title":"Chicken","calories":450}]},{"name":"Dinner","items":[{"title":"Salmon","calories":550}]}]}]}
+
+${userInputs.age}yr ${userInputs.gender} ${userInputs.fitnessGoal} ${dayName}.`;
+            
+            const body = {
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: {
+                    maxOutputTokens: 300, // Very conservative for single day
+                    temperature: 0.7,
+                    topP: 0.95,
+                    topK: 40
+                }
+            };
+            
+            const response = await secureApiCall("generate-plan", {
+                endpoint: "gemini-2.0-flash-lite:generateContent",
+                body: body
+            });
+            
+            const text = getFirstPartText(response);
+            if (text) {
+                const dayData = extractFirstJSON(text);
+                if (dayData && dayData.days && dayData.days[0]) {
+                    planDays.push(dayData.days[0]);
+                }
+            }
+        }
+        
+        if (planDays.length > 0) {
+            const finalPlan = {
+                planTitle: `Your ${planDays.length}-Day Meal Plan`,
+                notes: "",
+                days: planDays
+            };
+            
+            finalPlan.days.forEach(normalizeDayMeals);
+            ensureDayTotals(finalPlan);
+            currentPlan = finalPlan;
+            renderResults(finalPlan, userInputs);
+        } else {
+            throw new Error("Failed to generate any days");
+        }
+    }
+
     // ---------- Generate Complete 7-Day Plan ----------
     async function generateComplete7DayPlan() {
         try {
@@ -1113,19 +1166,10 @@ Use different proteins/methods than existing recipes.`;
       if (imgWrap) imgWrap.style.display = 'none';
 
       try {
-        // Update loader text
-        if (loaderText) loaderText.textContent = `Creating your complete 7-day plan...`;
+        // Generate 1 day at a time - only reliable approach for token limits
+        if (loaderText) loaderText.textContent = `Creating your meal plan...`;
         
-        // Try single 7-day generation first, fallback to 3-day if it fails
-        try {
-          await generateComplete7DayPlan();
-        } catch (error) {
-          console.warn("7-day generation failed, falling back to 3-day generation:", error);
-          if (loaderText) loaderText.textContent = `Creating your 3-day plan...`;
-          
-          // Fallback to generating just 3 days to stay within token limits
-          await generateFallback3DayPlan();
-        }
+        await generateDayByDayPlan();
 
         // Plan image: generate via Gemini Images endpoint
         try {
