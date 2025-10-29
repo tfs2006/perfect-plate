@@ -461,18 +461,25 @@ JSON format (respond with ONLY this structure, no other text):
         // Build meal examples based on what user selected
         const mealExamples = [];
         if (selectedMeals.includes('Breakfast')) {
-            mealExamples.push('{"name":"Breakfast","items":[{"title":"Scrambled Eggs","calories":350,"protein":20,"carbs":30,"fat":15,"ingredients":[{"item":"Eggs","qty":"2","unit":"large"}],"steps":["Beat eggs","Cook","Serve"]}]}');
+            mealExamples.push('{"name":"Breakfast","items":[{"title":"Scrambled Eggs","calories":350,"protein":20,"carbs":30,"fat":15,"ingredients":[{"item":"Eggs","qty":"2","unit":"large"}],"steps":["Beat eggs","Cook","Serve"],"benefits":"High protein for energy","tips":"Cook on medium heat"}]}');
         }
         if (selectedMeals.includes('Lunch')) {
-            mealExamples.push('{"name":"Lunch","items":[{"title":"Grilled Chicken","calories":450,"protein":35,"carbs":25,"fat":20,"ingredients":[{"item":"Chicken breast","qty":"4","unit":"oz"}],"steps":["Grill chicken","Serve"]}]}');
+            mealExamples.push('{"name":"Lunch","items":[{"title":"Grilled Chicken","calories":450,"protein":35,"carbs":25,"fat":20,"ingredients":[{"item":"Chicken breast","qty":"4","unit":"oz"}],"steps":["Grill chicken","Serve"],"benefits":"Lean protein for muscle","tips":"Don\'t overcook"}]}');
         }
         if (selectedMeals.includes('Dinner')) {
-            mealExamples.push('{"name":"Dinner","items":[{"title":"Baked Salmon","calories":500,"protein":40,"carbs":30,"fat":25,"ingredients":[{"item":"Salmon","qty":"5","unit":"oz"}],"steps":["Bake salmon","Serve"]}]}');
+            mealExamples.push('{"name":"Dinner","items":[{"title":"Baked Salmon","calories":500,"protein":40,"carbs":30,"fat":25,"ingredients":[{"item":"Salmon","qty":"5","unit":"oz"}],"steps":["Bake salmon","Serve"],"benefits":"Omega-3 for heart health","tips":"Bake at 400°F"}]}');
         }
         
         const prompt = `Return ONLY valid JSON, no explanatory text. Create ${selectedMeals.join(', ')} for ${today}.
 
 Requirements: ${userInputs.age}yr ${userInputs.gender}, ${userInputs.fitnessGoal}${userInputs.dietaryPrefs?.length ? ', '+userInputs.dietaryPrefs.join('/') : ''}${userInputs.exclusions ? ', avoid '+userInputs.exclusions : ''}${userInputs.ethnicity ? ', '+userInputs.ethnicity+' cuisine' : ''}
+
+Include for each meal item:
+- Full ingredients with quantities
+- Step-by-step cooking instructions
+- "benefits": Brief health benefits (1 sentence)
+- "tips": Cooking or preparation tips (1 sentence)
+- Complete macros (calories, protein, carbs, fat)
 
 JSON format (respond with ONLY this structure, no other text):
 {"days":[{"day":"${today}","totals":{"calories":1800,"protein":120,"carbs":180,"fat":60},"meals":[${mealExamples.join(',')}]}]}`;
@@ -1504,6 +1511,16 @@ Use different proteins/methods than existing recipes.`;
               ${it.rationale ? `<p class="text-sm text-gray-600">${escapeHTML(it.rationale)}</p>` : ""}
               ${tags ? `<div class="flex flex-wrap gap-2">${tags}</div>` : ""}
 
+              ${it.benefits ? `
+                <div class="mt-3 p-3 bg-emerald-50 border-l-4 border-emerald-500 rounded">
+                  <p class="text-sm text-emerald-900"><strong>💡 Health Benefits:</strong> ${escapeHTML(it.benefits)}</p>
+                </div>` : ""}
+              
+              ${it.tips ? `
+                <div class="mt-2 p-3 bg-blue-50 border-l-4 border-blue-500 rounded">
+                  <p class="text-sm text-blue-900"><strong>👨‍🍳 Cooking Tip:</strong> ${escapeHTML(it.tips)}</p>
+                </div>` : ""}
+              
               <details class="mt-2">
                 <summary class="cursor-pointer text-sm text-emerald-700">Ingredients & Steps</summary>
                 <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4">
