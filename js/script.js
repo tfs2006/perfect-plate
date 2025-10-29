@@ -171,6 +171,7 @@
   ready(() => {
     initIcons();
     let lastInputs = null;
+    let userInputs = null; // For 7-day generation
     let currentPlan = null;
 
     const API_BASE = (typeof window.API_BASE === "string" && window.API_BASE.trim())
@@ -332,6 +333,93 @@
       return `{"days":[{"day":"Mon","totals":{"calories":1800,"protein":120,"carbs":180,"fat":60},"meals":[{"name":"Breakfast","items":[{"title":"Eggs Toast","calories":350,"protein":20,"carbs":30,"fat":15,"ingredients":[{"item":"Eggs","qty":2,"unit":"large"}],"steps":["Cook","Serve"]}]}]}]}
 
 ${daysList}: ${i.age}yr ${i.gender}, ${i.fitnessGoal}${i.dietaryPrefs?.length ? ', '+i.dietaryPrefs.slice(0,2).join('/') : ''}${i.exclusions ? ', no '+i.exclusions.slice(0,50) : ''}. 3 meals, 1 item each.${avoid ? ' Skip '+avoid : ''}`;
+    }
+
+    // ---------- Single 7-Day Prompt (most efficient) ----------
+    function buildComplete7DayPrompt(userInputs) {
+      const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+      
+      return `{"days":[{"day":"Monday","totals":{"calories":1800,"protein":120,"carbs":180,"fat":60},"meals":[{"name":"Breakfast","items":[{"title":"Eggs Toast","calories":350,"protein":20,"carbs":30,"fat":15,"ingredients":[{"item":"Eggs","qty":2,"unit":"large"}],"steps":["Cook","Serve"]}]},{"name":"Lunch","items":[{"title":"Chicken Salad","calories":450,"protein":35,"carbs":25,"fat":22,"ingredients":[{"item":"Chicken","qty":4,"unit":"oz"}],"steps":["Grill","Mix"]}]},{"name":"Dinner","items":[{"title":"Salmon Rice","calories":550,"protein":40,"carbs":45,"fat":20,"ingredients":[{"item":"Salmon","qty":5,"unit":"oz"}],"steps":["Bake","Serve"]}]}]},...6 more days]
+
+Complete 7-day meal plan for ${userInputs.age}yr ${userInputs.gender}, ${userInputs.fitnessGoal}${userInputs.dietaryPrefs?.length ? ', '+userInputs.dietaryPrefs.slice(0,2).join('/') : ''}${userInputs.exclusions ? ', avoid '+userInputs.exclusions.slice(0,50) : ''}. Each day: 3 meals (Breakfast/Lunch/Dinner), 1 item per meal. Vary proteins daily. Total ~1800 cal/day.`;
+    }
+
+    // ---------- Generate Complete 7-Day Plan ----------
+    async function generateComplete7DayPlan() {
+        try {
+            const prompt = buildComplete7DayPrompt(userInputs);
+            console.log("7-Day prompt:", prompt);
+            
+            const body = {
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: {
+                    maxOutputTokens: 1500, // Larger limit for 7-day response
+                    temperature: 0.7,
+                    topP: 0.95,
+                    topK: 40
+                }
+            };
+            
+            const response = await secureApiCall("generate-plan", {
+                endpoint: "gemini-2.0-flash-lite:generateContent",
+                body: body
+            });
+            
+            const text = getFirstPartText(response);
+            if (!text) {
+                throw new Error("No response text from API");
+            }
+            
+            processAndDisplayFullWeek(text);
+            
+        } catch (error) {
+            console.error("7-Day generation error:", error);
+            throw error; // Re-throw to be handled by submit handler
+        }
+    }
+
+    // ---------- Process and Display Full Week ----------
+    function processAndDisplayFullWeek(responseText) {
+        try {
+            // Use existing JSON extraction method
+            const weekData = extractFirstJSON(responseText);
+            
+            if (!weekData || !weekData.days || !Array.isArray(weekData.days)) {
+                throw new Error("Invalid week structure");
+            }
+            
+            // Ensure we have the proper structure with coercePlan
+            const plan = coercePlan(weekData);
+            
+            // Sort days in correct order
+            const dayOrder = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+            const sortedDays = plan.days.sort((a, b) => {
+                return dayOrder.indexOf(a.day) - dayOrder.indexOf(b.day);
+            });
+            
+            // Create final plan structure
+            const finalPlan = {
+                planTitle: "Your 7-Day Meal Plan",
+                notes: "",
+                days: sortedDays
+            };
+            
+            // Normalize meal structure and ensure day totals
+            finalPlan.days.forEach(normalizeDayMeals);
+            ensureDayTotals(finalPlan);
+            
+            // Store for global access
+            currentPlan = finalPlan;
+            
+            // Render using existing system
+            renderResults(finalPlan, userInputs);
+            
+            console.log("✅ Complete 7-day plan generated successfully");
+            
+        } catch (error) {
+            console.error("Processing error:", error);
+            throw new Error("Error processing meal plan: " + error.message);
+        }
     }
 
     // ---------- JSON helpers ----------
@@ -960,7 +1048,9 @@ Use different proteins/methods than existing recipes.`;
       const fitnessGoal = $("fitness-goal").value;
       const exclusions = $("exclusions").value.trim();
       const dietaryPrefs = Array.from(document.querySelectorAll('input[name="diet"]:checked')).map(el => el.value);
-      lastInputs = { age, gender, ethnicity, medicalConditions, fitnessGoal, exclusions, dietaryPrefs, goal: fitnessGoal };
+      
+      // Store user inputs for 7-day generation
+      userInputs = { age, gender, ethnicity, medicalConditions, fitnessGoal, exclusions, dietaryPrefs, goal: fitnessGoal };
 
       formContainer.style.display = "none";
       showLoader();
@@ -970,446 +1060,11 @@ Use different proteins/methods than existing recipes.`;
       if (imgWrap) imgWrap.style.display = 'none';
 
       try {
-        // Generate each day individually to avoid long JSON truncation and make parsing more reliable
-        const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
-        const usedTitles = new Set(); // Track used titles across all days
-        const usedTokens = new Set(); // Track used tokens across all days
-        const allPreviousItems = []; // Track all previously generated items for similarity checks
-
-        /**
-         * Generate a batch of days (1-2 days) with dynamic batch sizing based on token estimates.
-         * This implements the batching strategy recommended for Gemini API to avoid MAX_TOKENS issues.
-         * 
-         * @param {string[]} daysArray - Array of day names to generate (e.g., ["Monday", "Tuesday"])
-         * @param {number} maxTokens - Maximum output tokens to request
-         * @param {number} temperature - Temperature for generation
-         * @returns {object|null} - Plan object with days array, or null on failure
-         */
-        async function generateBatch(daysArray, maxTokens, temperature) {
-          try {
-            const daysList = daysArray.join(", ");
-            const prompt = buildJsonPromptRange(lastInputs, daysArray,
-              Array.from(usedTitles).slice(0, 30),
-              Array.from(usedTokens).slice(0, 40));
-            
-            // Estimate tokens and determine if batch is too large
-            const tokenEstimate = estimateAndLogTokenUsage(prompt, maxTokens);
-            
-            // If batch would use >75% of tokens, split it down to 1 day
-            if (tokenEstimate.utilizationPercent > 75 && daysArray.length > 1) {
-              console.warn(`[generateBatch] Batch of ${daysArray.length} days would use ${tokenEstimate.utilizationPercent}% of tokens`);
-              console.warn(`[generateBatch] Splitting batch - will generate days individually instead`);
-              return null; // Signal to caller to split batch
-            }
-            
-            // Auto-adjust maxOutputTokens based on estimate
-            let adjustedMaxTokens = maxTokens;
-            if (!tokenEstimate.withinLimit || tokenEstimate.utilizationPercent > 70) {
-              adjustedMaxTokens = adjustMaxOutputTokens(prompt, maxTokens);
-              console.log(`[generateBatch] Adjusted maxOutputTokens for batch ${daysList}: ${maxTokens} → ${adjustedMaxTokens}`);
-            }
-            
-            const genConfig = {
-              maxOutputTokens: Math.min(adjustedMaxTokens, 400), // Much lower to avoid MAX_TOKENS
-              temperature,
-              topP: 0.95,
-              topK: 40
-              // Note: responseMimeType not supported by Generative Language API
-            };
-            
-            console.log(`[generateBatch] Generating batch: ${daysList}`);
-            console.log(`[generateBatch] Using model: gemini-2.0-flash-lite (15 RPM, optimized for simple tasks)`);
-            console.log(`[generateBatch] Config:`, {
-              ...genConfig,
-              estimatedTotal: tokenEstimate.estimatedTotal,
-              utilizationPercent: tokenEstimate.utilizationPercent
-            });
-            
-            const body = {
-              contents: [{ parts: [{ text: prompt }] }],
-              generationConfig: genConfig
-            };
-            
-            const resp = await secureApiCall("generate-plan", {
-              endpoint: "gemini-2.0-flash-lite:generateContent",
-              body
-            });
-            
-            if (!resp) {
-              console.error(`[generateBatch] Null response for batch: ${daysList}`);
-              console.error(`[generateBatch] Config used:`, genConfig);
-              return null;
-            }
-            
-            const text = getFirstPartText(resp);
-            if (!text) {
-              console.error(`[generateBatch] ⚠️ Model returned no text for batch: ${daysList}`);
-              console.error(`[generateBatch] Config used:`, genConfig);
-              console.error(`[generateBatch] Token estimate:`, tokenEstimate);
-              return null;
-            }
-            
-            console.log(`[generateBatch] ✓ Received text for batch ${daysList}, length:`, text.length);
-            
-            let batchPlan = coercePlan(extractFirstJSON(text));
-            if (!batchPlan || !Array.isArray(batchPlan.days) || batchPlan.days.length === 0) {
-              console.warn(`[generateBatch] Failed to parse JSON for batch: ${daysList}`);
-              console.log(`[generateBatch] Raw text (first 400 chars):`, String(text).slice(0, 400));
-              return null;
-            }
-            
-            if (needsRepair(batchPlan)) {
-              console.log(`[generateBatch] Batch ${daysList} needs repair`);
-              batchPlan = await repairPlan(batchPlan, lastInputs);
-            }
-            
-            console.log(`[generateBatch] ✓ Successfully generated ${batchPlan.days.length} days for batch: ${daysList}`);
-            return batchPlan;
-            
-          } catch (err) {
-            if (err.message && (err.message.includes("MAX_TOKENS") || err.message.includes("Empty"))) {
-              console.error(`[generateBatch] Token/complexity issue for batch ${daysArray.join(", ")}: ${err.message}`);
-              return null; // Signal to split batch
-            }
-            console.error(`[generateBatch] Error generating batch:`, err);
-            throw err;
-          }
-        }
-
-        async function generateDay(dayName) {
-          async function tryOnce(maxTokens, temperature, attempt = 1) {
-            try {
-              const prompt = buildJsonPromptRange(lastInputs, [dayName], 
-                Array.from(usedTitles).slice(0, 30),  // Reduced from 100 to 30
-                Array.from(usedTokens).slice(0, 40));  // Reduced from 150 to 40
-              
-              // ===== PRE-CALL TOKEN ESTIMATION AND LOGGING =====
-              const promptLength = prompt.length;
-              console.log(`[generateDay] Attempt ${attempt} for ${dayName} - prompt length: ${promptLength} chars`);
-              
-              // Estimate and log token usage BEFORE making the call
-              const tokenEstimate = estimateAndLogTokenUsage(prompt, maxTokens);
-              
-              // Auto-adjust maxOutputTokens if estimate suggests we're approaching limits
-              let adjustedMaxTokens = maxTokens;
-              if (!tokenEstimate.withinLimit || tokenEstimate.utilizationPercent > 75) {
-                adjustedMaxTokens = adjustMaxOutputTokens(prompt, maxTokens);
-                console.log(`[generateDay] Adjusted maxOutputTokens for ${dayName}: ${maxTokens} → ${adjustedMaxTokens}`);
-              }
-              
-              if (promptLength > 2500) {
-                console.warn(`[generateDay] Prompt is long (${promptLength} chars), reducing complexity may help avoid token limits`);
-              }
-              
-              // Log exact configuration being used
-              const genConfig = {
-                maxOutputTokens: Math.min(adjustedMaxTokens, 400), // Much lower to avoid MAX_TOKENS
-                temperature,
-                topP: 0.95,
-                topK: 40
-                // Note: responseMimeType not supported by Generative Language API
-              };
-              
-              console.log(`[generateDay] Using model: gemini-2.0-flash-lite (15 RPM, optimized for simple tasks)`);
-              console.log(`[generateDay] Generation config for ${dayName}:`, {
-                ...genConfig,
-                estimatedTotal: tokenEstimate.estimatedTotal,
-                utilizationPercent: tokenEstimate.utilizationPercent
-              });
-              
-              const body = {
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: genConfig
-              };
-
-              const resp = await secureApiCall("generate-plan", {
-                endpoint: "gemini-2.0-flash-lite:generateContent",
-                body
-              });
-
-              console.log(`[generateDay] Response for ${dayName}:`, resp ? "received" : "null");
-              
-              // Log full response structure for debugging
-              if (resp) {
-                console.log(`[generateDay] Response has candidates:`, !!resp.candidates);
-                if (resp.candidates) {
-                  console.log(`[generateDay] Candidates length:`, resp.candidates.length);
-                }
-              } else {
-                console.error(`[generateDay] Null response from API for ${dayName}`);
-                console.error(`[generateDay] Config used:`, genConfig);
-                return null;
-              }
-
-              const text = getFirstPartText(resp);
-              window.__lastPlanText = text || ""; // for debugging in console
-              
-              if (!text) {
-                console.error(`[generateDay] ⚠️ Model returned no text for ${dayName} (attempt ${attempt})`);
-                console.error(`[generateDay] Config used:`, genConfig);
-                console.error(`[generateDay] Token estimate:`, tokenEstimate);
-                console.log(`[generateDay] Full response for ${dayName}:`, JSON.stringify(resp, null, 2));
-                return null;
-              }
-              
-              console.log(`[generateDay] ✓ Received text for ${dayName}, length:`, text.length);
-              
-              let partPlan = coercePlan(extractFirstJSON(text));
-              if (!partPlan || !Array.isArray(partPlan.days)) {
-                console.warn(`[generateDay] Failed to parse JSON for ${dayName}`);
-                console.log(`[generateDay] Raw text (first 400 chars):`, String(text).slice(0,400));
-                // Log full raw text for debugging when parsing fails
-                console.log(`[generateDay] Full raw text:`, text);
-                return null;
-              }
-              if (needsRepair(partPlan)) {
-                console.log(`[generateDay] Plan for ${dayName} needs repair`);
-                partPlan = await repairPlan(partPlan, lastInputs);
-              }
-              return partPlan;
-            } catch (err) {
-              // If content was blocked, there's a safety issue, or MAX_TOKENS hit, propagate the error
-              if (err.message && (err.message.includes("blocked") || err.message.includes("SAFETY") || err.message.includes("MAX_TOKENS"))) {
-                console.error(`[generateDay] ${dayName} hit ${err.message} on attempt ${attempt}`);
-                
-                // For MAX_TOKENS, we can retry with lower token count
-                if (err.message.includes("MAX_TOKENS")) {
-                  console.log(`[generateDay] Will retry ${dayName} with lower maxOutputTokens`);
-                  return null; // Allow retry with lower tokens
-                }
-                
-                throw err; // For SAFETY/blocked, throw immediately
-              }
-              console.error(`[generateDay] Error in attempt ${attempt} for ${dayName}:`, err);
-              return null;
-            }
-          }
-
-          // Single attempt only - no retries to minimize API calls
-          // Use conservative token budget to maximize success rate
-          let planPart = await tryOnce(400, 0.5, 1);  // Reduced to 400 tokens to avoid MAX_TOKENS
-          return planPart;
-        }
-
-        // ===== RATE-LIMIT FRIENDLY STRATEGY =====
-        // Generate only 3 days maximum per click to stay under free tier limit of 10 requests/hour
-        // This prevents rate limiting and allows multiple generations per hour
-        const daysOut = [];
-        const dayErrors = []; // Track errors for better diagnostics
+        // Update loader text
+        if (loaderText) loaderText.textContent = `Creating your complete 7-day plan...`;
         
-        const MAX_DAYS_PER_CLICK = 3; // Stay well under 10 request limit
-        const daysToProcess = DAYS.slice(0, MAX_DAYS_PER_CLICK);
-        
-        let i = 0;
-        while (i < daysToProcess.length) {
-          // Always generate single days for maximum efficiency
-          const daysToGenerate = [daysToProcess[i]];
-          
-          const daysList = daysToGenerate.join(" & ");
-          if (loaderText) loaderText.textContent = `Creating your plan… ${i+1}/${daysToProcess.length} (${daysList})`;
-          
-          console.log(`[Generation] Processing day: ${daysList} (${i+1}/${daysToProcess.length})`);
-          
-          let batchSuccess = false;
-          
-          // Try batch generation (with progressively lower token limits)
-          if (daysToGenerate.length > 1) {
-            // Try batch with conservative token limits for 2-day batches
-            let batchPlan = await generateBatch(daysToGenerate, 1600, 0.7);
-            if (!batchPlan) batchPlan = await generateBatch(daysToGenerate, 1200, 0.5);
-            if (!batchPlan) batchPlan = await generateBatch(daysToGenerate, 900, 0.3);
-            
-            if (batchPlan && Array.isArray(batchPlan.days) && batchPlan.days.length > 0) {
-              console.log(`[Generation] ✓ Batch succeeded for ${daysList}, got ${batchPlan.days.length} day(s)`);
-              
-              // Process each day from the batch
-              for (const dayData of batchPlan.days) {
-                let processedDay = pickUniqueItemsForDay(dayData, usedTitles, usedTokens, allPreviousItems);
-                
-                // Check for missing/incomplete meals
-                const emptyMeals = (processedDay.meals||[])
-                  .filter(m => !m.items || m.items.length === 0)
-                  .map(m => m.name)
-                  .filter(Boolean);
-                
-                const needsRegenMeals = processedDay.needsRegeneration || [];
-                const missingNames = [...new Set([...emptyMeals, ...needsRegenMeals])];
-                
-                if (missingNames.length > 0) {
-                  const fills = await fillMissingMealsForDay(
-                    dayData.day || daysToGenerate[daysOut.length],
-                    missingNames,
-                    usedTitles,
-                    usedTokens,
-                    lastInputs,
-                    allPreviousItems
-                  );
-                  
-                  if (Array.isArray(fills) && fills.length) {
-                    fills.forEach(fm => {
-                      const idx = (processedDay.meals||[]).findIndex(m => 
-                        String(m.name||'').toLowerCase() === String(fm.name||'').toLowerCase());
-                      
-                      if (idx >= 0 && Array.isArray(fm.items) && fm.items.length) {
-                        const tempDay = { meals: [ { name: processedDay.meals[idx].name, items: fm.items } ] };
-                        const chosen = pickUniqueItemsForDay(tempDay, usedTitles, usedTokens, allPreviousItems);
-                        
-                        processedDay.meals[idx].items = chosen.meals[0].items;
-                        processedDay.meals[idx].needsRegeneration = false;
-                        
-                        if (chosen.meals[0].items.length > 0) {
-                          allPreviousItems.push(chosen.meals[0].items[0]);
-                        }
-                      }
-                    });
-                  }
-                  
-                  delete processedDay.needsRegeneration;
-                }
-                
-                daysOut.push(processedDay);
-              }
-              
-              batchSuccess = true;
-              i += batchPlan.days.length; // Advance by number of days successfully generated
-            } else {
-              console.warn(`[Generation] Batch failed for ${daysList}, falling back to individual day generation`);
-            }
-          }
-          
-          // If batch failed or we have only 1 day, generate individually
-          if (!batchSuccess) {
-            for (const day of daysToGenerate) {
-              if (loaderText) loaderText.textContent = `Creating your plan… ${i+1}/7 (${day})`;
-              
-              try {
-                const part = await generateDay(day);
-                if (part?.days?.[0]) {
-                  // Select unique items and track their titles and tokens
-                  let processedDay = pickUniqueItemsForDay(part.days[0], usedTitles, usedTokens, allPreviousItems);
-                  
-                  // Check for both empty meals and meals that need regeneration
-                  const emptyMeals = (processedDay.meals||[])
-                    .filter(m => !m.items || m.items.length === 0)
-                    .map(m => m.name)
-                    .filter(Boolean);
-                  
-                  const needsRegenMeals = processedDay.needsRegeneration || [];
-                  
-                  // Combine both lists (avoiding duplicates)
-                  const missingNames = [...new Set([...emptyMeals, ...needsRegenMeals])];
-                  
-                  // If any meals need regeneration or are empty, generate them now
-                  if (missingNames.length > 0) {
-                    const fills = await fillMissingMealsForDay(
-                      day, 
-                      missingNames, 
-                      usedTitles, 
-                      usedTokens, 
-                      lastInputs,
-                      allPreviousItems
-                    );
-                    
-                    if (Array.isArray(fills) && fills.length) {
-                      fills.forEach(fm => {
-                        const idx = (processedDay.meals||[]).findIndex(m => 
-                          String(m.name||'').toLowerCase() === String(fm.name||'').toLowerCase());
-                        
-                        if (idx >= 0 && Array.isArray(fm.items) && fm.items.length) {
-                          // Use the new unique item
-                          const tempDay = { meals: [ { name: processedDay.meals[idx].name, items: fm.items } ] };
-                          const chosen = pickUniqueItemsForDay(tempDay, usedTitles, usedTokens, allPreviousItems);
-                          
-                          // Update the meal with the regenerated item
-                          processedDay.meals[idx].items = chosen.meals[0].items;
-                          processedDay.meals[idx].needsRegeneration = false;
-                          
-                          // Add to previous items for future similarity checks
-                          if (chosen.meals[0].items.length > 0) {
-                            allPreviousItems.push(chosen.meals[0].items[0]);
-                          }
-                        }
-                      });
-                    }
-                    
-                    // Remove the regeneration flag
-                    delete processedDay.needsRegeneration;
-                  }
-                  
-                  daysOut.push(processedDay);
-                } else {
-                  const errMsg = `Failed to generate valid plan for ${day}`;
-                  console.warn(errMsg);
-                  dayErrors.push(errMsg);
-                }
-              } catch (e) {
-                const errMsg = `Error generating ${day}: ${e.message || e.name || e.toString()}`;
-                console.warn(errMsg, e);
-                dayErrors.push(errMsg);
-              }
-              
-              i++; // Advance to next day
-            }
-          }
-        }
-
-        if (!daysOut.length) {
-          // Provide more specific error message based on what failed
-          if (dayErrors.length > 0) {
-            const errorSummary = dayErrors.slice(0, 3).join('; ');
-            const moreErrorsText = dayErrors.length > 3 ? ` (and ${dayErrors.length - 3} more errors)` : '';
-            
-            // Try a simple test call to see if the API is working at all
-            console.log("[generatePlan] Testing API with simple prompt...");
-            try {
-              const testResp = await secureApiCall("generate-plan", {
-                endpoint: "gemini-2.0-flash-lite:generateContent",
-                body: {
-                  contents: [{ parts: [{ text: "Say 'API is working' in JSON format: {\"message\":\"API is working\"}" }] }],
-                  generationConfig: { 
-                    maxOutputTokens: 50, 
-                    temperature: 0.1
-                    // Note: responseMimeType not supported by Generative Language API
-                  }
-                }
-              });
-              
-              const testText = getFirstPartText(testResp);
-              if (!testText) {
-                console.error("[generatePlan] Simple test also returned no text. Response:", testResp);
-                throw new Error(`The Gemini API is returning empty responses. This may be due to: (1) Invalid API key, (2) Model endpoint issues, (3) Rate limiting, or (4) Invalid request format. Check browser console for detailed logs. Original errors: ${errorSummary}${moreErrorsText}`);
-              } else {
-                console.log("[generatePlan] Simple test succeeded with text:", testText.substring(0, 100));
-                console.log("[generatePlan] This suggests the issue is with the meal plan prompt or response parsing.");
-                throw new Error(`Failed to generate meal plan days, but the API connection works. This suggests the prompt may be too complex or the response format is unexpected. Original errors: ${errorSummary}${moreErrorsText}. Check console for details.`);
-              }
-            } catch (testErr) {
-              if (testErr.message.includes("Failed to generate meal plan days")) {
-                throw testErr; // Re-throw if it's our own error
-              }
-              console.error("[generatePlan] Test call failed:", testErr);
-              throw new Error(`Failed to generate any days. API test also failed: ${testErr.message}. Original errors: ${errorSummary}${moreErrorsText}`);
-            }
-          } else {
-            throw new Error("Failed to generate meal plan. The API may be unavailable or returned invalid data. Please check your API configuration and try again.");
-          }
-        }
-
-        let plan = {
-          planTitle: "Your 7-Day Plan",
-          notes: "",
-          days: daysOut
-        };
-
-        // We've already picked unique items, so normalizeDayMeals should just ensure structure
-        // (it won't change items if there's already exactly one per meal)
-        (plan.days || []).forEach(normalizeDayMeals);
-        
-        // Perform a final check for duplicates across the entire plan and regenerate if needed
-        plan = await regenerateDuplicateMeals(plan, lastInputs);
-
-        ensureDayTotals(plan);
-        renderResults(plan, lastInputs);
+        // Generate complete 7-day plan in one API call
+        await generateComplete7DayPlan();
 
         // Plan image: generate via Gemini Images endpoint
         try {
