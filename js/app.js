@@ -1176,10 +1176,10 @@ Use different proteins/methods than existing recipes.`;
       if (imgWrap) imgWrap.style.display = 'none';
 
       try {
-        // Generate all 7 days in one API call - more efficient
-        if (loaderText) loaderText.textContent = `Creating your 7-day meal plan...`;
+        // Generate 1 day at a time - most reliable for detailed recipes
+        if (loaderText) loaderText.textContent = `Creating your meal plan...`;
         
-        await generateComplete7DayPlan();
+        await generateDayByDayPlan();
 
         // Plan image: generate via Gemini Images endpoint
         try {
