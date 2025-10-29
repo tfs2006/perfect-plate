@@ -359,7 +359,7 @@ ${dayName}: ${userInputs.age}yr ${userInputs.gender}, ${userInputs.fitnessGoal}$
             const body = {
                 contents: [{ parts: [{ text: prompt }] }],
                 generationConfig: {
-                    maxOutputTokens: 8000, // Maximum for gemini-2.5-flash
+                    maxOutputTokens: 8000, // Maximum for gemini-2.0-flash
                     temperature: 0.7,
                     topP: 0.95,
                     topK: 40
@@ -368,7 +368,7 @@ ${dayName}: ${userInputs.age}yr ${userInputs.gender}, ${userInputs.fitnessGoal}$
             
             try {
                 const response = await secureApiCall("generate-plan", {
-                    endpoint: "gemini-2.5-flash:generateContent",
+                    endpoint: "gemini-2.0-flash:generateContent",
                     body: body
                 });
                 
@@ -422,7 +422,7 @@ Full 7 days (Mon-Sun): ${userInputs.age}yr ${userInputs.gender}, ${userInputs.fi
             };
             
             const response = await secureApiCall("generate-plan", {
-                endpoint: "gemini-2.5-flash:generateContent",
+                endpoint: "gemini-2.0-flash:generateContent",
                 body: body
             });
             
@@ -503,7 +503,7 @@ ${userInputs.age}yr ${userInputs.gender} ${userInputs.fitnessGoal} 3days.`;
             };
             
             const response = await secureApiCall("generate-plan", {
-                endpoint: "gemini-2.5-flash:generateContent",
+                endpoint: "gemini-2.0-flash:generateContent",
                 body: body
             });
             
@@ -734,7 +734,7 @@ ${userInputs.age}yr ${userInputs.gender} ${userInputs.fitnessGoal} 3days.`;
           `Fix JSON: Add missing ingredients[] and steps[] to all items. Keep same structure. Return JSON ONLY.\n\nProfile: ${JSON.stringify(inputs)}\n\nJSON:\n${JSON.stringify(plan)}`;
 
         const fixRes = await secureApiCall("generate-plan", {
-          endpoint: "gemini-2.5-flash:generateContent",
+          endpoint: "gemini-2.0-flash:generateContent",
           body: {
             contents: [{ parts: [{ text: repairPrompt }] }],
             generationConfig: {
@@ -972,7 +972,7 @@ Use different proteins/methods than existing recipes.`;
         } 
       };
       
-      const resp = await secureApiCall('generate-plan', { endpoint: 'gemini-2.5-flash:generateContent', body });
+      const resp = await secureApiCall('generate-plan', { endpoint: 'gemini-2.0-flash:generateContent', body });
       const text = getFirstPartText(resp);
       const obj = extractFirstJSON(text);
       
@@ -1466,7 +1466,7 @@ Use different proteins/methods/cuisines.`;
 
         // Call the API
         const resp = await secureApiCall("generate-plan", {
-          endpoint: "gemini-2.5-flash:generateContent",
+          endpoint: "gemini-2.0-flash:generateContent",
           body: {
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: {
@@ -1510,7 +1510,7 @@ Use different proteins/methods/cuisines.`;
           showMessage("Improving recipe uniqueness...", 5000);
           
           const retryResp = await secureApiCall("generate-plan", {
-            endpoint: "gemini-2.5-flash:generateContent",
+            endpoint: "gemini-2.0-flash:generateContent",
             body: {
               contents: [{ parts: [{ text: prompt + "\n\nIMPORTANT: Make this COMPLETELY DIFFERENT." }] }],
               generationConfig: {
