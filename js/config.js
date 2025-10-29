@@ -1,3 +1,3 @@
-// Point the frontend at your Netlify Functions base
-// If you rename your Netlify site, update this URL.
-window.API_BASE = "https://perfect-plate-app.netlify.app/.netlify/functions";
+// Point the frontend at your Vercel API routes
+// Update this URL to match your Vercel deployment
+window.API_BASE = "https://perfect-plate-two.vercel.app/api";
