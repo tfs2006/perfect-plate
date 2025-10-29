@@ -404,13 +404,17 @@ ${dayName}: ${userInputs.age}yr ${userInputs.gender}, ${userInputs.fitnessGoal}$
     // ---------- Generate Complete 7-Day Plan ----------
     async function generateComplete7DayPlan() {
         try {
-            const prompt = buildComplete7DayPrompt(userInputs);
+            // Build a comprehensive prompt for all 7 days
+            const prompt = `{"days":[{"day":"Monday","totals":{"calories":1800,"protein":120,"carbs":180,"fat":60},"meals":[{"name":"Breakfast","items":[{"title":"Scrambled Eggs","calories":350,"protein":20,"carbs":30,"fat":15,"ingredients":[{"item":"Eggs","qty":"2","unit":"large"}],"steps":["Beat eggs","Cook in pan","Serve"]}]},{"name":"Lunch","items":[{"title":"Grilled Chicken","calories":450,"protein":35,"carbs":25,"fat":20,"ingredients":[{"item":"Chicken breast","qty":"4","unit":"oz"}],"steps":["Grill chicken","Serve"]}]},{"name":"Dinner","items":[{"title":"Baked Salmon","calories":500,"protein":40,"carbs":30,"fat":25,"ingredients":[{"item":"Salmon","qty":"5","unit":"oz"}],"steps":["Bake salmon"]}]}]},{"day":"Tuesday",...},{"day":"Wednesday",...},{"day":"Thursday",...},{"day":"Friday",...},{"day":"Saturday",...},{"day":"Sunday",...}]}
+
+Full 7 days (Mon-Sun): ${userInputs.age}yr ${userInputs.gender}, ${userInputs.fitnessGoal}${userInputs.dietaryPrefs?.length ? ', '+userInputs.dietaryPrefs.join('/') : ''}${userInputs.exclusions ? ', avoid '+userInputs.exclusions : ''}${userInputs.ethnicity ? ', '+userInputs.ethnicity+' cuisine' : ''}. Each day: 3 meals with complete ingredients, steps, macros.`;
+            
             console.log("7-Day prompt:", prompt);
             
             const body = {
                 contents: [{ parts: [{ text: prompt }] }],
                 generationConfig: {
-                    maxOutputTokens: 400, // Reduced from 600 - very conservative
+                    maxOutputTokens: 8000, // Maximum for all 7 days in one call
                     temperature: 0.7,
                     topP: 0.95,
                     topK: 40
@@ -1172,10 +1176,10 @@ Use different proteins/methods than existing recipes.`;
       if (imgWrap) imgWrap.style.display = 'none';
 
       try {
-        // Generate 1 day at a time - only reliable approach for token limits
-        if (loaderText) loaderText.textContent = `Creating your meal plan...`;
+        // Generate all 7 days in one API call - more efficient
+        if (loaderText) loaderText.textContent = `Creating your 7-day meal plan...`;
         
-        await generateDayByDayPlan();
+        await generateComplete7DayPlan();
 
         // Plan image: generate via Gemini Images endpoint
         try {
