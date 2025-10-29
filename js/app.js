@@ -366,17 +366,22 @@ ${dayName}: ${userInputs.age}yr ${userInputs.gender}, ${userInputs.fitnessGoal}$
                 }
             };
             
-            const response = await secureApiCall("generate-plan", {
-                endpoint: "gemini-2.5-flash:generateContent",
-                body: body
-            });
-            
-            const text = getFirstPartText(response);
-            if (text) {
-                const dayData = extractFirstJSON(text);
-                if (dayData && dayData.days && dayData.days[0]) {
-                    planDays.push(dayData.days[0]);
+            try {
+                const response = await secureApiCall("generate-plan", {
+                    endpoint: "gemini-2.5-flash:generateContent",
+                    body: body
+                });
+                
+                const text = getFirstPartText(response);
+                if (text) {
+                    const dayData = extractFirstJSON(text);
+                    if (dayData && dayData.days && dayData.days[0]) {
+                        planDays.push(dayData.days[0]);
+                    }
                 }
+            } catch (err) {
+                console.error(`[Day Generation] Failed to generate ${dayName}:`, err);
+                // Continue with other days even if one fails
             }
         }
         
@@ -1617,10 +1622,29 @@ Use different proteins/methods/cuisines.`;
     // ---------- Grocery (grouped by category) ----------
     function buildGroceryGroups(plan) {
       const byKey = new Map();
+      
+      // Normalize item name by removing descriptors and standardizing
+      const normalizeItemName = (itemName) => {
+        return itemName.toLowerCase()
+          .replace(/\(.*?\)/g, '') // Remove anything in parentheses
+          .replace(/\b(diced|chopped|sliced|minced|shredded|cubed|grated|fresh|dried)\b/gi, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+      };
+      
+      // Normalize unit by removing descriptors
+      const normalizeUnit = (unit) => {
+        return (unit || '').toLowerCase()
+          .replace(/\(.*?\)/g, '')
+          .trim();
+      };
+      
       const add = (item, qty, unit, category) => {
         const cat = (category || "Other").trim() || "Other";
-        const key = `${cat}||${item.toLowerCase()}|${(unit||'').toLowerCase()}`;
-        const prev = byKey.get(key) || { item, qty: null, unit: unit || "", category: cat };
+        const normalizedItem = normalizeItemName(item);
+        const normalizedUnit = normalizeUnit(unit);
+        const key = `${cat}||${normalizedItem}|${normalizedUnit}`;
+        const prev = byKey.get(key) || { item: normalizedItem, displayItem: item, qty: null, unit: normalizedUnit, category: cat };
         const num = (qty == null ? null : Number(qty));
         if (Number.isFinite(num)) {
           prev.qty = (prev.qty == null ? num : prev.qty + num);
@@ -1681,12 +1705,16 @@ Use different proteins/methods/cuisines.`;
         const items = groupsMap.get(cat).sort((a,b)=>a.item.localeCompare(b.item));
         return {
           category: cat,
-          items: items.map(x => ({
-            label: `${x.item}${(x.qty != null && x.qty > 0) ? ` — ${formatQty(x.qty)} ${x.unit}` : ""}`,
-            item: x.item,
-            qty: x.qty,
-            unit: x.unit
-          }))
+          items: items.map(x => {
+            // Capitalize first letter for display
+            const displayItem = x.item.charAt(0).toUpperCase() + x.item.slice(1);
+            return {
+              label: `${displayItem}${(x.qty != null && x.qty > 0) ? ` — ${formatQty(x.qty)} ${x.unit}`.trim() : ""}`,
+              item: x.item,
+              qty: x.qty,
+              unit: x.unit
+            };
+          })
         };
       });
     }
