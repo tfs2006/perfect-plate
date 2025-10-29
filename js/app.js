@@ -375,10 +375,16 @@ ${dayName}: ${userInputs.age}yr ${userInputs.gender}, ${userInputs.fitnessGoal}$
                 const text = getFirstPartText(response);
                 if (text) {
                     console.log(`[${dayName}] Response text length:`, text.length);
+                    console.log(`[${dayName}] First 500 chars:`, text.substring(0, 500));
                     const dayData = extractFirstJSON(text);
+                    console.log(`[${dayName}] Extracted JSON:`, dayData);
                     if (dayData && dayData.days && dayData.days[0]) {
                         console.log(`[${dayName}] Successfully parsed day data`);
                         planDays.push(dayData.days[0]);
+                    } else if (dayData && dayData.day) {
+                        // Model might return single day object instead of days array
+                        console.log(`[${dayName}] Found single day object, converting to array format`);
+                        planDays.push(dayData);
                     } else {
                         console.warn(`[${dayName}] Failed to extract day data from JSON`, { dayData });
                     }
