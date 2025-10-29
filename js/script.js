@@ -534,7 +534,7 @@ ${daysList}: ${i.age}yr ${i.gender}, ${i.fitnessGoal}${i.dietaryPrefs?.length ? 
           body: {
             contents: [{ parts: [{ text: repairPrompt }] }],
             generationConfig: {
-              maxOutputTokens: 600,  // Higher limit - no thoughts overhead
+              maxOutputTokens: 300,  // Much lower to avoid MAX_TOKENS
               temperature: 0.3,
               topP: 0.95,
               topK: 40
@@ -760,7 +760,7 @@ Use different proteins/methods than existing recipes.`;
       const body = { 
         contents: [{ parts: [{ text: prompt }] }], 
         generationConfig: {
-          maxOutputTokens: 600,  // Higher limit - no thoughts overhead
+          maxOutputTokens: 300,  // Much lower to avoid MAX_TOKENS
           temperature: 0.7,
           topP: 0.95,
           topK: 40
@@ -1010,7 +1010,7 @@ Use different proteins/methods than existing recipes.`;
             }
             
             const genConfig = {
-              maxOutputTokens: Math.min(adjustedMaxTokens, 800), // Higher limit - no thoughts overhead
+              maxOutputTokens: Math.min(adjustedMaxTokens, 400), // Much lower to avoid MAX_TOKENS
               temperature,
               topP: 0.95,
               topK: 40
@@ -1103,7 +1103,7 @@ Use different proteins/methods than existing recipes.`;
               
               // Log exact configuration being used
               const genConfig = {
-                maxOutputTokens: Math.min(adjustedMaxTokens, 800), // Higher limit - no thoughts overhead
+                maxOutputTokens: Math.min(adjustedMaxTokens, 400), // Much lower to avoid MAX_TOKENS
                 temperature,
                 topP: 0.95,
                 topK: 40
@@ -1187,7 +1187,7 @@ Use different proteins/methods than existing recipes.`;
 
           // Single attempt only - no retries to minimize API calls
           // Use conservative token budget to maximize success rate
-          let planPart = await tryOnce(600, 0.5, 1);  // Single attempt with conservative settings
+          let planPart = await tryOnce(400, 0.5, 1);  // Reduced to 400 tokens to avoid MAX_TOKENS
           return planPart;
         }
 
