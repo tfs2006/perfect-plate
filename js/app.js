@@ -359,7 +359,7 @@ ${dayName}: ${userInputs.age}yr ${userInputs.gender}, ${userInputs.fitnessGoal}$
             const body = {
                 contents: [{ parts: [{ text: prompt }] }],
                 generationConfig: {
-                    maxOutputTokens: 6000, // Increased for complete meal details
+                    maxOutputTokens: 8000, // Maximum for gemini-2.5-flash
                     temperature: 0.7,
                     topP: 0.95,
                     topK: 40
