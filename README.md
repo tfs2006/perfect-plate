@@ -258,3 +258,4 @@ If you receive a "MODEL_NOT_FOUND" or 404 error:
 - If you later host everything on Netlify: leave `window.API_BASE=""` and the app will call same‑origin `/.netlify/functions/*`.
 
 © 2025 Perfect‑Plate
+# Force redeploy
