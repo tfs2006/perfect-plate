@@ -530,11 +530,11 @@ ${daysList}: ${i.age}yr ${i.gender}, ${i.fitnessGoal}${i.dietaryPrefs?.length ? 
           `Fix JSON: Add missing ingredients[] and steps[] to all items. Keep same structure. Return JSON ONLY.\n\nProfile: ${JSON.stringify(inputs)}\n\nJSON:\n${JSON.stringify(plan)}`;
 
         const fixRes = await secureApiCall("generate-plan", {
-          endpoint: "gemini-2.5-flash:generateContent",
+          endpoint: "gemini-2.0-flash-lite:generateContent",
           body: {
             contents: [{ parts: [{ text: repairPrompt }] }],
             generationConfig: {
-              maxOutputTokens: 200,  // Very low due to thoughts taking ~600 tokens
+              maxOutputTokens: 600,  // Higher limit - no thoughts overhead
               temperature: 0.3,
               topP: 0.95,
               topK: 40
@@ -760,7 +760,7 @@ Use different proteins/methods than existing recipes.`;
       const body = { 
         contents: [{ parts: [{ text: prompt }] }], 
         generationConfig: {
-          maxOutputTokens: 200,  // Very low due to thoughts taking ~600 tokens
+          maxOutputTokens: 600,  // Higher limit - no thoughts overhead
           temperature: 0.7,
           topP: 0.95,
           topK: 40
@@ -768,7 +768,7 @@ Use different proteins/methods than existing recipes.`;
         } 
       };
       
-      const resp = await secureApiCall('generate-plan', { endpoint: 'gemini-2.5-flash:generateContent', body });
+      const resp = await secureApiCall('generate-plan', { endpoint: 'gemini-2.0-flash-lite:generateContent', body });
       const text = getFirstPartText(resp);
       const obj = extractFirstJSON(text);
       
@@ -1010,7 +1010,7 @@ Use different proteins/methods than existing recipes.`;
             }
             
             const genConfig = {
-              maxOutputTokens: Math.min(adjustedMaxTokens, 200), // Very low due to thoughts taking ~600 tokens
+              maxOutputTokens: Math.min(adjustedMaxTokens, 800), // Higher limit - no thoughts overhead
               temperature,
               topP: 0.95,
               topK: 40
@@ -1018,7 +1018,7 @@ Use different proteins/methods than existing recipes.`;
             };
             
             console.log(`[generateBatch] Generating batch: ${daysList}`);
-            console.log(`[generateBatch] Using model: gemini-2.5-flash (faster, higher rate limits)`);
+            console.log(`[generateBatch] Using model: gemini-2.0-flash-lite (15 RPM, optimized for simple tasks)`);
             console.log(`[generateBatch] Config:`, {
               ...genConfig,
               estimatedTotal: tokenEstimate.estimatedTotal,
@@ -1031,7 +1031,7 @@ Use different proteins/methods than existing recipes.`;
             };
             
             const resp = await secureApiCall("generate-plan", {
-              endpoint: "gemini-2.5-flash:generateContent",
+              endpoint: "gemini-2.0-flash-lite:generateContent",
               body
             });
             
@@ -1103,14 +1103,14 @@ Use different proteins/methods than existing recipes.`;
               
               // Log exact configuration being used
               const genConfig = {
-                maxOutputTokens: Math.min(adjustedMaxTokens, 200), // Very low due to thoughts taking ~600 tokens
+                maxOutputTokens: Math.min(adjustedMaxTokens, 800), // Higher limit - no thoughts overhead
                 temperature,
                 topP: 0.95,
                 topK: 40
                 // Note: responseMimeType not supported by Generative Language API
               };
               
-              console.log(`[generateDay] Using model: gemini-2.5-flash (faster, higher rate limits)`);
+              console.log(`[generateDay] Using model: gemini-2.0-flash-lite (15 RPM, optimized for simple tasks)`);
               console.log(`[generateDay] Generation config for ${dayName}:`, {
                 ...genConfig,
                 estimatedTotal: tokenEstimate.estimatedTotal,
@@ -1123,7 +1123,7 @@ Use different proteins/methods than existing recipes.`;
               };
 
               const resp = await secureApiCall("generate-plan", {
-                endpoint: "gemini-2.5-flash:generateContent",
+                endpoint: "gemini-2.0-flash-lite:generateContent",
                 body
               });
 
@@ -1363,7 +1363,7 @@ Use different proteins/methods than existing recipes.`;
             console.log("[generatePlan] Testing API with simple prompt...");
             try {
               const testResp = await secureApiCall("generate-plan", {
-                endpoint: "gemini-2.5-flash:generateContent",
+                endpoint: "gemini-2.0-flash-lite:generateContent",
                 body: {
                   contents: [{ parts: [{ text: "Say 'API is working' in JSON format: {\"message\":\"API is working\"}" }] }],
                   generationConfig: { 
@@ -1696,7 +1696,7 @@ Use different proteins/methods/cuisines.`;
 
         // Call the API
         const resp = await secureApiCall("generate-plan", {
-          endpoint: "gemini-2.5-flash:generateContent",
+          endpoint: "gemini-2.0-flash-lite:generateContent",
           body: {
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: {
@@ -1740,7 +1740,7 @@ Use different proteins/methods/cuisines.`;
           showMessage("Improving recipe uniqueness...", 5000);
           
           const retryResp = await secureApiCall("generate-plan", {
-            endpoint: "gemini-2.5-flash:generateContent",
+            endpoint: "gemini-2.0-flash-lite:generateContent",
             body: {
               contents: [{ parts: [{ text: prompt + "\n\nIMPORTANT: Make this COMPLETELY DIFFERENT." }] }],
               generationConfig: {
