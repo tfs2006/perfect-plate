@@ -1,3 +1,3 @@
 // Point the frontend at your Vercel API routes
-// Update this URL to match your Vercel deployment
-window.API_BASE = "https://perfect-plate-two.vercel.app/api";
+// Use relative URL to work with any Vercel deployment domain
+window.API_BASE = "/api";
