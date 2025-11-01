@@ -1,5 +1,8 @@
 // PERFECT-PLATE – Frontend App (detailed recipes + rationale + grouped grocery)
 (function () {
+  // Note: Usage tracking now handled by auth.js and Supabase
+  // These functions are kept for backwards compatibility but will use Supabase
+  
   // ---------- Utilities ----------
   const $ = (id) => document.getElementById(id);
   const ready = (fn) =>
@@ -398,7 +401,7 @@ JSON format (respond with ONLY this structure, no other text):
 {"days":[{"day":"${dayName}","totals":{"calories":1800,"protein":120,"carbs":180,"fat":60},"meals":[{"name":"Breakfast","items":[{"title":"Scrambled Eggs","calories":350,"protein":20,"carbs":30,"fat":15,"ingredients":[{"item":"Eggs","qty":"2","unit":"large"}],"steps":["Beat eggs","Cook in pan","Serve"]}]},{"name":"Lunch","items":[{"title":"Grilled Chicken","calories":450,"protein":35,"carbs":25,"fat":20,"ingredients":[{"item":"Chicken breast","qty":"4","unit":"oz"}],"steps":["Grill chicken","Serve"]}]},{"name":"Dinner","items":[{"title":"Baked Salmon","calories":500,"protein":40,"carbs":30,"fat":25,"ingredients":[{"item":"Salmon","qty":"5","unit":"oz"}],"steps":["Bake salmon","Serve"]}]}]}]}`;
             
             const body = {
-                contents: [{ parts: [{ text: prompt }] }],
+                contents: [{ role: "user", parts: [{ text: prompt }] }],
                 generationConfig: {
                     maxOutputTokens: 8000, // Maximum for gemini-2.0-flash
                     temperature: 0.7,
@@ -456,6 +459,13 @@ JSON format (respond with ONLY this structure, no other text):
 
     // ---------- Generate Selected Meals for Today ----------
     async function generateSelectedMeals(selectedMeals) {
+        // Check if user can generate
+        const canGenerate = await canUserGenerate();
+        if (!canGenerate) {
+            showPaywall();
+            return;
+        }
+        
         const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
         
         // Build meal examples based on what user selected
@@ -485,7 +495,7 @@ JSON format (respond with ONLY this structure, no other text):
 {"days":[{"day":"${today}","totals":{"calories":1800,"protein":120,"carbs":180,"fat":60},"meals":[${mealExamples.join(',')}]}]}`;
         
         const body = {
-            contents: [{ parts: [{ text: prompt }] }],
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
             generationConfig: {
                 maxOutputTokens: 8000,
                 temperature: 0.7,
@@ -517,6 +527,14 @@ JSON format (respond with ONLY this structure, no other text):
                     finalPlan.days.forEach(normalizeDayMeals);
                     ensureDayTotals(finalPlan);
                     currentPlan = finalPlan;
+                    
+                    // Increment generation count in database
+                    await incrementGenerationCount();
+                    // Update UI display
+                    if (typeof updateGenerationDisplay === 'function') {
+                        updateGenerationDisplay();
+                    }
+                    
                     renderResults(finalPlan, userInputs);
                 } else if (dayData && dayData.day) {
                     const finalPlan = {
@@ -528,6 +546,14 @@ JSON format (respond with ONLY this structure, no other text):
                     finalPlan.days.forEach(normalizeDayMeals);
                     ensureDayTotals(finalPlan);
                     currentPlan = finalPlan;
+                    
+                    // Increment generation count in database
+                    await incrementGenerationCount();
+                    // Update UI display
+                    if (typeof updateGenerationDisplay === 'function') {
+                        updateGenerationDisplay();
+                    }
+                    
                     renderResults(finalPlan, userInputs);
                 } else {
                     throw new Error("Failed to extract meal data from response");
@@ -552,7 +578,7 @@ Full 7 days (Mon-Sun): ${userInputs.age}yr ${userInputs.gender}, ${userInputs.fi
             console.log("7-Day prompt:", prompt);
             
             const body = {
-                contents: [{ parts: [{ text: prompt }] }],
+                contents: [{ role: "user", parts: [{ text: prompt }] }],
                 generationConfig: {
                     maxOutputTokens: 8000, // Maximum for all 7 days in one call
                     temperature: 0.7,
@@ -633,7 +659,7 @@ ${userInputs.age}yr ${userInputs.gender} ${userInputs.fitnessGoal} 3days.`;
             console.log("3-Day fallback prompt:", prompt);
             
             const body = {
-                contents: [{ parts: [{ text: prompt }] }],
+                contents: [{ role: "user", parts: [{ text: prompt }] }],
                 generationConfig: {
                     maxOutputTokens: 200, // Very small for 3 days
                     temperature: 0.7,
@@ -876,7 +902,7 @@ ${userInputs.age}yr ${userInputs.gender} ${userInputs.fitnessGoal} 3days.`;
         const fixRes = await secureApiCall("generate-plan", {
           endpoint: "gemini-2.0-flash:generateContent",
           body: {
-            contents: [{ parts: [{ text: repairPrompt }] }],
+            contents: [{ role: "user", parts: [{ text: repairPrompt }] }],
             generationConfig: {
               maxOutputTokens: 300,  // Much lower to avoid MAX_TOKENS
               temperature: 0.3,
@@ -1102,7 +1128,7 @@ Avoid keywords: ${avoidTok || 'none'}
 Use different proteins/methods than existing recipes.`;
 
       const body = { 
-        contents: [{ parts: [{ text: prompt }] }], 
+        contents: [{ role: "user", parts: [{ text: prompt }] }], 
         generationConfig: {
           maxOutputTokens: 300,  // Much lower to avoid MAX_TOKENS
           temperature: 0.7,
@@ -1297,6 +1323,9 @@ Use different proteins/methods than existing recipes.`;
       e.preventDefault();
       if (!form.checkValidity()) { showMessage("Please complete required fields."); return; }
 
+      // Check if user can generate (this is now handled in generateSelectedMeals)
+      // The auth check happens inside generateSelectedMeals function
+
       const age = $("age").value.trim();
       const gender = $("gender").value;
       const ethnicity = $("ethnicity").value.trim();
@@ -1312,6 +1341,10 @@ Use different proteins/methods than existing recipes.`;
         showMessage("Please select at least one meal type (Breakfast, Lunch, or Dinner).");
         return;
       }
+      
+      // Increment usage count
+      const count = incrementGenerationCount();
+      console.log(`Generation #${count} (${getRemainingGenerations()} remaining)`);
       
       // Store user inputs
       userInputs = { age, gender, ethnicity, medicalConditions, fitnessGoal, exclusions, dietaryPrefs, goal: fitnessGoal, selectedMeals };
@@ -1337,7 +1370,7 @@ Use different proteins/methods than existing recipes.`;
           const imageResult = await secureApiCall("generate-plan", {
             endpoint: "imagegeneration:generate",
             body: {
-              contents: [{ parts: [{ text: imgPrompt }] }],
+              contents: [{ role: "user", parts: [{ text: imgPrompt }] }],
               generationConfig: {
                 size: "1200x800",
                 mimeType: "image/png",
@@ -1626,7 +1659,7 @@ Use different proteins/methods/cuisines.`;
         const resp = await secureApiCall("generate-plan", {
           endpoint: "gemini-2.0-flash:generateContent",
           body: {
-            contents: [{ parts: [{ text: prompt }] }],
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
             generationConfig: {
               maxOutputTokens: 800,  // Reduced from 1500
               temperature: 0.7,
@@ -1670,7 +1703,7 @@ Use different proteins/methods/cuisines.`;
           const retryResp = await secureApiCall("generate-plan", {
             endpoint: "gemini-2.0-flash:generateContent",
             body: {
-              contents: [{ parts: [{ text: prompt + "\n\nIMPORTANT: Make this COMPLETELY DIFFERENT." }] }],
+              contents: [{ role: "user", parts: [{ text: prompt + "\n\nIMPORTANT: Make this COMPLETELY DIFFERENT." }] }],
               generationConfig: {
                 maxOutputTokens: 800,  // Reduced from 1500
                 temperature: 0.9, // Higher temperature for more creativity
@@ -1946,5 +1979,39 @@ Use different proteins/methods/cuisines.`;
       doc.addImage(img, "PNG", (W - w) / 2, 24, w, h);
       doc.save("perfect-plate-plan.pdf");
     }
+    
+    // ---------- Paywall & Stripe ----------
+    function showPaywall() {
+      const modal = $('paywall-modal');
+      if (modal) {
+        modal.classList.remove('hidden');
+        initIcons(); // Re-render lucide icons
+      }
+    }
+    
+    function hidePaywall() {
+      const modal = $('paywall-modal');
+      if (modal) modal.classList.add('hidden');
+    }
+    
+    // Close paywall button
+    $('close-paywall')?.addEventListener('click', hidePaywall);
+    
+    // Upgrade button - Redirect to pricing page
+    $('upgrade-button')?.addEventListener('click', () => {
+      window.location.href = 'pricing.html';
+    });
+    
+    // Check URL for payment success
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('payment') === 'success') {
+      setPaidUser();
+      showMessage('🎉 Payment successful! You now have unlimited access.');
+      // Clear URL params
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+    
+    // Generation counter display is now handled by auth.js and index.html
+    // See updateGenerationDisplay() function in index.html
   });
 })();
