@@ -30,6 +30,14 @@
         </div>
     </header>
 
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-2xl p-8 flex flex-col items-center gap-4">
+            <div class="animate-spin rounded-full h-16 w-16 border-b-4 border-purple-600"></div>
+            <p class="text-gray-700 font-semibold">Loading your profile...</p>
+        </div>
+    </div>
+
     <div class="max-w-4xl mx-auto px-4 py-8 lg:py-12">
         <!-- Desktop Back Button -->
         <div class="hidden lg:block mb-6">
@@ -120,12 +128,12 @@
             <!-- Stripe Customer Portal Link -->
             <div id="stripePortalSection" class="mt-6 pt-6 border-t border-gray-200 hidden">
                 <p class="text-sm text-gray-600 mb-4">Manage your subscription, update payment methods, or view invoices in the Stripe Customer Portal.</p>
-                <a href="#" id="stripePortalLink" target="_blank" class="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold px-6 py-3 rounded-lg transition duration-200">
+                <button onclick="openCustomerPortal()" id="stripePortalButton" class="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold px-6 py-3 rounded-lg transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
                     </svg>
-                    Manage Subscription
-                </a>
+                    <span id="portalButtonText">Manage Subscription</span>
+                </button>
             </div>
         </div>
 
@@ -175,6 +183,7 @@
                     <ul class="space-y-2 text-sm">
                         <li><a href="/terms.html" class="hover:text-purple-400 transition">Terms of Service</a></li>
                         <li><a href="/privacy.html" class="hover:text-purple-400 transition">Privacy Policy</a></li>
+                        <li><a href="/contact.html" class="hover:text-purple-400 transition">Contact Us</a></li>
                     </ul>
                 </div>
                 <div>
@@ -280,11 +289,57 @@
                     // Show Stripe portal for paid users
                     if (limit > 3) {
                         document.getElementById('stripePortalSection').classList.remove('hidden');
+                        
+                        // Store stripe_customer_id for portal access
+                        window.stripeCustomerId = profile.stripe_customer_id;
                     }
                 }
+                
+                // Hide loading overlay
+                document.getElementById('loadingOverlay').style.display = 'none';
             } catch (error) {
                 console.error('Error loading profile:', error);
+                document.getElementById('loadingOverlay').style.display = 'none';
                 alert('Error loading profile data. Please try again.');
+            }
+        }
+
+        // Open Stripe Customer Portal
+        async function openCustomerPortal() {
+            const button = document.getElementById('stripePortalButton');
+            const buttonText = document.getElementById('portalButtonText');
+            
+            try {
+                button.disabled = true;
+                buttonText.textContent = 'Loading...';
+                
+                if (!window.stripeCustomerId) {
+                    throw new Error('No Stripe customer ID found. Please contact support.');
+                }
+
+                const response = await fetch('/api/create-portal-session', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        customerId: window.stripeCustomerId
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.message || 'Failed to open customer portal');
+                }
+
+                // Redirect to Stripe Customer Portal
+                window.location.href = data.url;
+            } catch (error) {
+                console.error('Error opening customer portal:', error);
+                alert('Unable to open subscription management. Please try again or contact support at perfectplate@4ourmedia.com');
+                button.disabled = false;
+                buttonText.textContent = 'Manage Subscription';
             }
         }
 

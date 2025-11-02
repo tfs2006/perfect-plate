@@ -48,6 +48,11 @@ async function signIn(email, password) {
 // Sign out
 async function signOut() {
     try {
+        // Close mobile menu if open
+        if (typeof closeMobileMenu === 'function') {
+            closeMobileMenu();
+        }
+        
         const { error } = await supabase.auth.signOut();
         if (error) throw error;
         window.location.href = 'login.html';
@@ -75,7 +80,16 @@ async function getUserProfile() {
             // If profile doesn't exist, create it manually
             if (error.code === 'PGRST116') {
                 console.warn('Profile not found! Creating profile manually...');
-                return await createProfileManually(user);
+                const newProfile = await createProfileManually(user);
+                
+                // If manual creation also fails, alert user and suggest logout
+                if (!newProfile) {
+                    console.error('❌ Critical: Both automatic and manual profile creation failed');
+                    alert('There was an error setting up your account. Please sign out and try again, or contact support at perfectplate@4ourmedia.com');
+                    return null;
+                }
+                
+                return newProfile;
             }
             throw error;
         }
