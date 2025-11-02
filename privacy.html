@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy - Perfect Plate</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50">
+    <div class="max-w-4xl mx-auto py-12 px-4">
+        <h1 class="text-4xl font-bold text-gray-900 mb-4">Privacy Policy</h1>
+        <p class="text-sm text-gray-600 mb-8">Last updated: <span id="currentDate"></span></p>
+        
+        <div class="prose prose-lg max-w-none">
+            <h2 class="text-2xl font-bold text-gray-900 mt-8 mb-4">1. Introduction</h2>
+            <p class="text-gray-700 mb-4">
+                Welcome to Perfect Plate. We respect your privacy and are committed to protecting your personal data. This privacy policy will inform you about how we look after your personal data and tell you about your privacy rights.
+            </p>
+
+            <h2 class="text-2xl font-bold text-gray-900 mt-8 mb-4">2. Data We Collect</h2>
+            <p class="text-gray-700 mb-4">We collect the following information:</p>
+            <ul class="list-disc ml-6 text-gray-700 mb-4">
+                <li>Email address and name (for account creation)</li>
+                <li>Payment information (processed securely through Stripe)</li>
+                <li>Usage data (meal generation history, preferences)</li>
+                <li>Technical data (IP address, browser type, device information)</li>
+            </ul>
+
+            <h2 class="text-2xl font-bold text-gray-900 mt-8 mb-4">3. How We Use Your Data</h2>
+            <p class="text-gray-700 mb-4">We use your data to:</p>
+            <ul class="list-disc ml-6 text-gray-700 mb-4">
+                <li>Provide and improve our meal planning services</li>
+                <li>Process your payments and manage subscriptions</li>
+                <li>Send you service updates and notifications</li>
+                <li>Analyze usage patterns to enhance user experience</li>
+            </ul>
+
+            <h2 class="text-2xl font-bold text-gray-900 mt-8 mb-4">4. Data Security</h2>
+            <p class="text-gray-700 mb-4">
+                We implement appropriate security measures to protect your personal data. All data is encrypted in transit and at rest. Payment information is processed through Stripe and we never store your full credit card details.
+            </p>
+
+            <h2 class="text-2xl font-bold text-gray-900 mt-8 mb-4">5. Your Rights</h2>
+            <p class="text-gray-700 mb-4">You have the right to:</p>
+            <ul class="list-disc ml-6 text-gray-700 mb-4">
+                <li>Access your personal data</li>
+                <li>Correct inaccurate data</li>
+                <li>Request deletion of your data</li>
+                <li>Object to processing of your data</li>
+                <li>Export your data</li>
+            </ul>
+
+            <h2 class="text-2xl font-bold text-gray-900 mt-8 mb-4">6. Cookies</h2>
+            <p class="text-gray-700 mb-4">
+                We use essential cookies to maintain your session and authentication. We do not use tracking or advertising cookies.
+            </p>
+
+            <h2 class="text-2xl font-bold text-gray-900 mt-8 mb-4">7. Third-Party Services</h2>
+            <p class="text-gray-700 mb-4">We use the following third-party services:</p>
+            <ul class="list-disc ml-6 text-gray-700 mb-4">
+                <li><strong>Supabase:</strong> Authentication and database hosting</li>
+                <li><strong>Stripe:</strong> Payment processing</li>
+                <li><strong>Google Gemini AI:</strong> Meal plan generation</li>
+                <li><strong>Vercel:</strong> Application hosting</li>
+            </ul>
+
+            <h2 class="text-2xl font-bold text-gray-900 mt-8 mb-4">8. Contact Us</h2>
+            <p class="text-gray-700 mb-4">
+                If you have any questions about this privacy policy or your data, please contact us at:
+                <a href="mailto:perfectplate@4ourmedia.com" class="text-purple-600 hover:text-purple-700 underline">perfectplate@4ourmedia.com</a>
+            </p>
+        </div>
+
+        <div class="mt-12 pt-8 border-t border-gray-200">
+            <a href="/" class="text-purple-600 hover:text-purple-700 font-semibold">← Back to Perfect Plate</a>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-gray-900 text-gray-300 py-8 mt-16">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="grid md:grid-cols-3 gap-8 mb-6">
+                <!-- About -->
+                <div>
+                    <h3 class="text-white font-bold mb-3">Perfect Plate</h3>
+                    <p class="text-sm">Intelligent nutrition, simplified. AI-powered meal planning for a healthier you.</p>
+                </div>
+                
+                <!-- Legal Links -->
+                <div>
+                    <h3 class="text-white font-bold mb-3">Legal</h3>
+                    <ul class="space-y-2 text-sm">
+                        <li><a href="/terms.html" class="hover:text-purple-400 transition">Terms of Service</a></li>
+                        <li><a href="/privacy.html" class="hover:text-purple-400 transition">Privacy Policy</a></li>
+                    </ul>
+                </div>
+                
+                <!-- Contact -->
+                <div>
+                    <h3 class="text-white font-bold mb-3">Contact</h3>
+                    <p class="text-sm">Questions or feedback?</p>
+                    <a href="mailto:perfectplate@4ourmedia.com" class="text-purple-400 hover:text-purple-300 transition text-sm">perfectplate@4ourmedia.com</a>
+                </div>
+            </div>
+            
+            <div class="border-t border-gray-800 pt-6 text-center text-sm">
+                <p>&copy; <span id="currentYear"></span> Perfect Plate. All rights reserved.</p>
+                <p class="mt-2">A <a href="https://4ourmedia.com" target="_blank" class="text-purple-400 hover:text-purple-300 transition">4ourmedia</a> App by David J Woodbury</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Set current date
+        const options = { year: 'numeric', month: 'long', day: 'numeric' };
+        document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-US', options);
+        // Auto-update copyright year
+        document.getElementById('currentYear').textContent = new Date().getFullYear();
+    </script>
+</body>
+</html>
