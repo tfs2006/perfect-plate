@@ -1,9 +1,90 @@
 /* Base */
-body { font-family: 'Inter', sans-serif; background-color: #f7fafc; }
-.main-grid { display: grid; grid-template-columns: 300px 1fr; height: 100vh; }
+body { 
+  font-family: 'Inter', sans-serif; 
+  background-color: #f7fafc;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+.main-grid { 
+  display: grid; 
+  grid-template-columns: 300px 1fr; 
+  height: 100vh; 
+}
+
+/* Mobile Navigation Toggle */
+#mobile-menu-toggle {
+  display: none;
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 100;
+  background: #1f2937;
+  color: white;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+#mobile-menu-toggle:hover {
+  background: #374151;
+  transform: scale(1.05);
+}
+#mobile-menu-toggle:active {
+  transform: scale(0.95);
+}
+
+/* Mobile Sidebar Overlay */
+#sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 40;
+  backdrop-filter: blur(2px);
+}
+
+/* Responsive Grid & Sidebar */
 @media (max-width: 1024px) {
-  .main-grid { grid-template-columns: 1fr; }
-  #sidebar { display: none; }
+  .main-grid { 
+    grid-template-columns: 1fr; 
+  }
+  
+  #mobile-menu-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  
+  #sidebar { 
+    position: fixed;
+    left: -100%;
+    top: 0;
+    bottom: 0;
+    width: 280px;
+    max-width: 85vw;
+    z-index: 50;
+    transition: left 0.3s ease-in-out;
+    overflow-y: auto;
+  }
+  
+  #sidebar.mobile-open {
+    left: 0;
+  }
+  
+  #sidebar-overlay.active {
+    display: block;
+  }
+  
+  main {
+    padding: 5rem 1rem 1rem 1rem !important;
+  }
+}
+
+@media (max-width: 640px) {
+  main {
+    padding: 5rem 0.75rem 1rem 0.75rem !important;
+  }
 }
 
 /* Steps */
@@ -40,4 +121,155 @@ body { font-family: 'Inter', sans-serif; background-color: #f7fafc; }
   font-weight: 700;
   color: #0f766e;
   border-bottom: 1px solid #e5e7eb;
+}
+
+/* Mobile Optimizations */
+@media (max-width: 768px) {
+  /* Typography */
+  h1 { font-size: 1.5rem; }
+  h2 { font-size: 1.25rem; }
+  h3 { font-size: 1.125rem; }
+  
+  /* Form inputs */
+  input, select, textarea {
+    font-size: 16px !important; /* Prevents zoom on iOS */
+  }
+  
+  /* Buttons */
+  button {
+    min-height: 44px; /* Apple's recommended touch target */
+    font-size: 1rem;
+  }
+  
+  /* Cards and containers */
+  .bg-white {
+    border-radius: 0.75rem;
+  }
+  
+  /* Step indicators - stack vertically */
+  #step-indicators {
+    margin-top: 2rem !important;
+  }
+  
+  .step-indicator {
+    font-size: 0.875rem;
+  }
+  
+  /* Results section */
+  #results {
+    padding: 1rem !important;
+  }
+  
+  /* Tabs - make scrollable on mobile */
+  .flex.border-b {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .flex.border-b::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* Result tabs - prevent text wrapping */
+  .result-tab {
+    white-space: nowrap;
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+  }
+  
+  /* Action buttons in results */
+  .flex.gap-3 button {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+/* Extra small devices */
+@media (max-width: 480px) {
+  /* Tighter spacing */
+  .p-6 { padding: 1rem !important; }
+  .p-8 { padding: 1.25rem !important; }
+  .gap-6 { gap: 1rem !important; }
+  
+  /* Smaller user menu */
+  #sidebar .bg-gray-700 {
+    padding: 0.75rem !important;
+  }
+  
+  /* Stack action buttons */
+  .flex.gap-3 {
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+  }
+  
+  .flex.gap-3 button {
+    width: 100%;
+  }
+}
+
+/* Landscape mobile optimization */
+@media (max-width: 896px) and (orientation: landscape) {
+  #sidebar {
+    width: 240px;
+  }
+  
+  main {
+    padding-top: 3rem !important;
+  }
+  
+  #step-indicators {
+    margin-top: 1rem !important;
+  }
+  
+  .step-indicator {
+    gap: 0.5rem !important;
+  }
+}
+
+/* Touch interactions */
+@media (hover: none) and (pointer: coarse) {
+  /* Larger touch targets */
+  a, button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Remove hover states on touch devices */
+  .hover\:bg-emerald-600:hover {
+    background-color: inherit;
+  }
+  
+  /* Active states for touch feedback */
+  button:active {
+    transform: scale(0.98);
+    opacity: 0.9;
+  }
+  
+  a:active {
+    opacity: 0.8;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .bg-gray-100 {
+    background-color: #ffffff;
+  }
+  
+  .text-gray-600 {
+    color: #000000;
+  }
+  
+  button {
+    border: 2px solid currentColor;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

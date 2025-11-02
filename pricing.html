@@ -23,24 +23,25 @@
         </div>
 
         <!-- User Info Bar -->
-        <div class="bg-white rounded-lg p-4 mb-8 flex items-center justify-between max-w-2xl mx-auto">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center">
+        <div class="bg-white rounded-lg p-4 mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 max-w-2xl mx-auto">
+            <a href="/profile.html" class="flex items-center gap-3 hover:bg-gray-50 p-2 rounded-lg transition duration-200 -m-2 flex-1">
+                <div class="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center flex-shrink-0">
                     <i data-lucide="user" class="w-5 h-5 text-white"></i>
                 </div>
-                <div>
+                <div class="flex-1">
                     <p id="userName" class="font-semibold text-gray-800">Loading...</p>
                     <p id="currentPlan" class="text-sm text-gray-600">Loading plan...</p>
                 </div>
-            </div>
-            <div class="text-right">
+                <i data-lucide="chevron-right" class="w-4 h-4 text-gray-400 hidden sm:block"></i>
+            </a>
+            <div class="text-left sm:text-right w-full sm:w-auto">
                 <p class="text-sm text-gray-600">This month:</p>
                 <p id="generationCount" class="font-bold text-purple-600">Loading...</p>
             </div>
         </div>
 
         <!-- Pricing Cards -->
-        <div class="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto mb-8">
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8 max-w-6xl mx-auto mb-8">
             <!-- Starter Plan -->
             <div class="bg-white rounded-2xl shadow-2xl p-8 transform hover:scale-105 transition duration-300">
                 <div class="text-center mb-6">
